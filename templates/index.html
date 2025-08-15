@@ -1,0 +1,356 @@
+{% extends "base.html" %}
+{% block title %}Ventas - Acopio{% endblock %}
+
+{% block head_extra %}
+<style>
+    h1, h2 { color: #333; display: inline-block;}
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; font-size: 14px; background-color: white;}
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    tfoot { font-weight: bold; }
+    tfoot .subtotal { background-color: #f9f9f9; }
+    tfoot .grand-total { background-color: #f2f2f2; }
+    form { margin-bottom: 20px; }
+    select { padding: 8px; width: 220px; }
+    .info-label { font-weight: bold; margin-left: 15px; }
+    .summary-table { width: 50%; }
+    .pdf-button { 
+        margin-left: 20px; 
+        padding: 5px 10px; 
+        background-color: #d9534f; 
+        color: white; 
+        text-decoration: none; 
+        border-radius: 4px; 
+        font-size: 14px;
+    }
+    .chart-container {
+        width: 60%;
+        height: 400px; /* Added height */
+        margin-top: 30px;
+    }
+    .no-confirmada {
+        background-color: #fffacd; /* LemonChiffon, a light yellow */
+    }
+    .positivo { 
+        color: green; 
+        font-weight: bold; 
+    }
+    .negativo { 
+        color: red; 
+        font-weight: bold; 
+    }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %}
+
+{% block content %}
+    <h2>Contratos con Saldo Pendiente de Entrega</h2>
+    <div style="display: flex; flex-wrap: wrap;">
+        <div style="flex: 1; min-width: 50%;">
+            <table class="summary-table">
+                <thead>
+                    <tr>
+                        <th>Contrato</th>
+                        <th>Comprador</th>
+                        <th>Grano</th>
+                        <th>Cosecha</th>
+                        <th>Kilos Liquidados</th>
+                        <th>Kilos Pendientes</th>
+                        <th>Camiones Pendientes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for contrato in contratos_pendientes %}
+                    <tr>
+                        <td>{{ contrato.contrato }}</td>
+                        <td>{{ contrato.comprador }}</td>
+                        <td>{{ contrato.grano }}</td>
+                        <td>{{ contrato.cosecha }}</td>
+                        <td>{{ contrato.kilos_liquidados }}</td>
+                        <td>{{ contrato.kilos_pendientes }}</td>
+                        <td>{{ contrato.camiones_pendientes }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    {% for grano, totales in totales_por_grano.items() %}
+                    <tr>
+                        <td colspan="5" style="text-align: right;"><strong>Total {{ grano }}:</strong></td>
+                        <td><strong>{{ format_number(totales.kilos) }}</strong></td>
+                        <td><strong>{{ totales.camiones }}</strong></td>
+                    </tr>
+                    {% endfor %}
+                </tfoot>
+            </table>
+        </div>
+        <div style="flex: 1; min-width: 400px;">
+            <div class="chart-container">
+                <canvas id="pieChartPendientes"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="chart-container" style="width: 80%; margin-top: 30px;">
+        <canvas id="barChartStock"></canvas>
+    </div>
+
+    <hr style="margin: 40px 0;">
+
+    <h1>Consulta de Contratos</h1>
+
+    <form method="POST">
+        <label for="g_contrato">Seleccionar Contrato:</label>
+        <select id="g_contrato" name="g_contrato" onchange="this.form.submit()">
+            <option value="">Seleccione un contrato</option>
+            {% for contrato in contratos %}
+                <option value="{{ contrato }}" {% if contrato == g_contrato_filtro %}selected{% endif %}>{{ contrato }}</option>
+            {% endfor %}
+        </select>
+        
+        {% if info_adicional %}
+            <span class="info-label">Grano:</span> {{ info_adicional.grano }}
+            <span class="info-label">Cosecha:</span> {{ info_adicional.cosecha }}
+            {% if info_adicional.comprador %}
+                <span class="info-label">Comprador:</span> {{ info_adicional.comprador }}
+            {% endif %}
+        {% endif %}
+    </form>
+
+    
+
+
+    {% if entregas_confirmadas or entregas_no_confirmadas %}
+
+    <h2>Resumen</h2>
+        <table class="summary-table">
+            <tbody>
+                <tr>
+                    <td>Total Saldo Entregas</td>
+                    <td>{{ total_saldo }}</td>
+                </tr>
+                <tr>
+                    <td>Total Peso Liquidaciones</td>
+                    <td>{{ totales_liq['Peso'] }}</td>
+                </tr>
+                <tr class="{% if diferencia_num > 0 %}positivo{% elif diferencia_num < 0 %}negativo{% endif %}">
+                    <td><strong>Diferencia</strong></td>
+                    <td><strong>{{ diferencia }}</strong></td>
+                </tr>
+                {% if diferencia_num < 0 %}
+                <tr class="negativo">
+                    <td><strong>Camiones restantes:</strong></td>
+                    <td><strong>{{ camiones_restantes }}</strong></td>
+                </tr>
+                {% endif %}
+            </tbody>
+        </table>
+
+        <div class="chart-container">
+            <canvas id="comparacionChart"></canvas>
+        </div>
+
+        <div>
+            <h2>Entregas</h2>
+            <a href="{{ url_for('generar_pdf', tipo_reporte='entregas', contrato=g_contrato_filtro) }}" class="pdf-button">Exportar a PDF</a>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    {% if (entregas_no_confirmadas + entregas_confirmadas) %}
+                        {% for campo in (entregas_no_confirmadas + entregas_confirmadas)[0].keys() %}
+                            <th>{{ campo }}</th>
+                        {% endfor %}
+                    {% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for registro in entregas_no_confirmadas %}
+                <tr class="no-confirmada">
+                    {% for valor in registro.values() %}
+                        <td>{{ valor }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+                {% for registro in entregas_confirmadas %}
+                <tr>
+                    {% for valor in registro.values() %}
+                        <td>{{ valor }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr class="subtotal">
+                    <td colspan="3">Total No Confirmadas</td>
+                    <td>{{ total_no_confirmadas }}</td>
+                    <td>Registros: {{ registros_no_confirmadas }}</td>
+                </tr>
+                <tr class="subtotal">
+                    <td colspan="3">Total Confirmadas</td>
+                    <td>{{ total_confirmadas }}</td>
+                    <td>Registros: {{ registros_confirmadas }}</td>
+                </tr>
+                <tr class="grand-total">
+                    <td colspan="3">Total General</td>
+                    <td>{{ total_saldo }}</td>
+                    <td>Registros: {{ total_registros }}</td>
+                </tr>
+            </tfoot>
+        </table>
+    {% elif g_contrato_filtro %}
+        <p>No se encontraron entregas para el contrato seleccionado.</p>
+    {% endif %}
+
+    {% if liquidaciones_filtradas %}
+        <div>
+            <h2>Liquidaciones</h2>
+            <a href="{{ url_for('generar_pdf', tipo_reporte='liquidaciones', contrato=g_contrato_filtro) }}" class="pdf-button">Exportar a PDF</a>
+        </div>
+        <table>
+            <thead>
+                <tr>
+                    {% for campo in liquidaciones_filtradas[0].keys() %}
+                        <th>{{ campo }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for liquidacion in liquidaciones_filtradas %}
+                <tr>
+                    {% for valor in liquidacion.values() %}
+                        <td>{{ valor }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+            {% if totales_liq %}
+            <tfoot>
+                <tr>
+                    <td colspan="2">Totales ({{ total_liquidaciones }} registros)</td>
+                    <td>{{ totales_liq['Peso'] }}</td>
+                    <td></td> {# Columna vacía para Precio #}
+                    <td>{{ totales_liq['N.Grav.'] }}</td>
+                    <td>{{ totales_liq['IVA'] }}</td>
+                    <td>{{ totales_liq['Otros'] }}</td>
+                    <td>{{ totales_liq['Total'] }}</td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+
+    {% endif %}
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Pie Chart
+            var pieCtx = document.getElementById('pieChartPendientes').getContext('2d');
+            var pieChart = new Chart(pieCtx, {
+                type: 'pie',
+                data: {
+                    labels: {{ pie_chart_labels | tojson }},
+                    datasets: [{
+                        label: 'Kilos Pendientes por Grano',
+                        data: {{ pie_chart_values | tojson }},
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.6)',
+                            'rgba(54, 162, 235, 0.6)',
+                            'rgba(255, 206, 86, 0.6)',
+                            'rgba(75, 192, 192, 0.6)',
+                            'rgba(153, 102, 255, 0.6)',
+                            'rgba(255, 159, 64, 0.6)'
+                        ]
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Kilos Pendientes por Grano'
+                        }
+                    }
+                }
+            });
+
+            // Bar Chart
+            var barCtx = document.getElementById('barChartStock').getContext('2d');
+            var barChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: {{ bar_chart_labels | tojson }},
+                    datasets: [{
+                        label: 'Kilos Pendientes',
+                        data: {{ bar_chart_pendientes | tojson }},
+                        backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                    }, {
+                        label: 'Stock',
+                        data: {{ bar_chart_stock | tojson }},
+                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Kilos'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Kilos Pendientes vs. Stock por Grano y Cosecha'
+                        }
+                    }
+                }
+            });
+
+        {% if liquidaciones_filtradas %}
+            var ctx = document.getElementById('comparacionChart').getContext('2d');
+            var comparacionChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Entregas', 'Liquidaciones'],
+                    datasets: [{
+                        label: 'Comparación de Pesos',
+                        data: [{{ total_saldo_num | default(0) }}, {{ total_peso_num | default(0) }}],
+                        backgroundColor: [
+                            'rgba(75, 192, 192, 0.6)',
+                            'rgba(153, 102, 255, 0.6)'
+                        ],
+                        borderColor: [
+                            'rgba(75, 192, 192, 1)',
+                            'rgba(153, 102, 255, 1)'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Peso'
+                            }
+                        }
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Comparación de Entregas vs. Liquidaciones'
+                        }
+                    }
+                }
+            });
+        {% endif %}
+        });
+    </script>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}Página Principal - Acopio{% endblock %}
+
+{% block head_extra %}
+<style>
+    .home-container {
+        text-align: center;
+        position: relative;
+        padding-top: 50px;
+    }
+    .cycle-image {
+        width: 150px;
+        height: 150px;
+        object-fit: contain;
+        margin: 20px;
+    }
+    .arrow {
+        position: absolute;
+        width: 80px; /* Adjust size as needed */
+        height: 80px;
+        object-fit: contain;
+    }
+    #arrow1 {
+        top: 120px;
+        left: 40%;
+        transform: rotate(120deg);
+    }
+    #arrow2 {
+        top: 250px;
+        left: 55%;
+        transform: rotate(-10deg);
+    }
+    #arrow3 {
+        top: 120px;
+        right: 40%;
+        transform: rotate(240deg);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="home-container">
+    <h1>Acopio de Cereales</h1>
+    <div>
+       
+        <img src="{{ url_for('static', filename='assets/Maiz.png') }}" alt="Maíz" class="cycle-image">
+         <img src="{{ url_for('static', filename='assets/Trigo.png') }}" alt="Trigo" class="cycle-image">
+        <img src="{{ url_for('static', filename='assets/Soja.png') }}" alt="Soja" class="cycle-image">
+        
+        <img src="{{ url_for('static', filename='assets/Flecha.png') }}" class="arrow" id="arrow1">
+        <img src="{{ url_for('static', filename='assets/Flecha.png') }}" class="arrow" id="arrow2">
+        <img src="{{ url_for('static', filename='assets/Flecha.png') }}" class="arrow" id="arrow3">
+    </div>
+    <p>Bienvenido al sistema de gestión de acopio.</p>
+</div>
+{% endblock %}

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Acopio{% endblock %}</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 0;
+            background: linear-gradient(to bottom, #e8f5e9, #c8e6c9);
+            min-height: 100vh;
+        }
+        .navbar {
+            background-color: #2e7d32;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .navbar a {
+            float: left;
+            display: block;
+            color: white;
+            text-align: center;
+            padding: 14px 20px;
+            text-decoration: none;
+            font-size: 17px;
+        }
+        .navbar a:hover {
+            background-color: #388e3c;
+        }
+        .content {
+            padding: 20px;
+        }
+    </style>
+    {% block head_extra %}{% endblock %}
+</head>
+<body>
+    <div class="navbar">
+        <a href="{{ url_for('ventas') }}">Ventas</a>
+        <a href="{{ url_for('cobranzas') }}">Cobranzas</a>
+        <a href="{{ url_for('fletes') }}">Fletes</a>
+        <a href="{{ url_for('home') }}">Inicio</a>
+    </div>
+        
+    </div>
+
+    <div class="content">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>
