@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Consultas - Acopio{% endblock %}
+
+{% block content %}
+    <h1>Consultas</h1>
+
+    <div class="form-container">
+        <h2>Consulta SISA</h2>
+        <form method="POST">
+            <label for="cuit">CUIT:</label>
+            <input type="text" id="cuit" name="cuit" value="{{ cuit_consultado or '' }}" pattern="[0-9]*" title="Ingrese solo números">
+            <input type="submit" value="Consultar">
+        </form>
+    </div>
+
+    {% if tabla_sisa %}
+        <h2>Resultado de la Consulta SISA</h2>
+        <table border="1">
+            <thead>
+                <tr>
+                    {% for header in tabla_sisa.headers %}
+                        <th>{{ header }}</th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in tabla_sisa.rows %}
+                    <tr>
+                        {% for cell in row %}
+                            <td>{{ cell }}</td>
+                        {% endfor %}
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% elif error %}
+        <p style="color: red;">{{ error }}</p>
+    {% endif %}
+
+{% endblock %}

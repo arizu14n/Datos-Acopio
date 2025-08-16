@@ -9,6 +9,8 @@ import os
 import locale
 from decimal import Decimal
 import math
+import requests
+from bs4 import BeautifulSoup
 
 # --- CONFIGURACIÓN DE LOCALIZACIÓN PARA FORMATO DE NÚMEROS ---
 try:
@@ -375,6 +377,103 @@ def ventas():
         return f"<h1>Error: No se encontró el archivo DBF: {e.filename}</h1>"
     except Exception as e:
         return f"<h1>Ocurrió un error al leer el archivo: {e}</h1>"
+
+@app.route('/consultas', methods=['GET', 'POST'])
+def consultas():
+    cuit_to_display = '' # Default empty
+    if request.method == 'POST':
+        cuit = request.form.get('cuit')
+        cuit_to_display = cuit # Keep the searched CUIT for display
+        url = "https://servicioscf.afip.gob.ar/Registros/sisa/sisa.aspx"
+        from selenium import webdriver
+        from selenium.webdriver.chrome.options import Options
+        from selenium.webdriver.common.by import By
+        from selenium.webdriver.support.ui import WebDriverWait
+        from selenium.webdriver.support import expected_conditions as EC
+        from webdriver_manager.chrome import ChromeDriverManager
+        from selenium.webdriver.chrome.service import Service as ChromeService
+        import time
+
+        driver = None # Initialize driver to None
+        try:
+            chrome_options = Options()
+            chrome_options.add_argument("--headless")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--window-size=1920x1080") # Set a common window size
+            chrome_options.add_argument("--disable-dev-shm-usage") # Overcome limited resource problems
+
+            # Use ChromeDriverManager to automatically download and manage the driver
+            service = ChromeService(ChromeDriverManager().install())
+            driver = webdriver.Chrome(service=service, options=chrome_options)
+            
+            driver.get(url)
+
+            # Wait for the CUIT input field to be present
+            cuit_input = WebDriverWait(driver, 10).until(
+                EC.presence_of_element_located((By.ID, "txtcuit"))
+            )
+            cuit_input.clear()
+            cuit_input.send_keys(cuit)
+
+            # Find and click the "consultar" button
+            consultar_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.ID, "btnListar"))
+            )
+            consultar_button.click()
+
+            # Wait for the table to be present and visible
+            WebDriverWait(driver, 20).until(
+                EC.visibility_of_element_located((By.ID, "grv"))
+            )
+            
+            # Get the page source after the table has loaded
+            soup = BeautifulSoup(driver.page_source, 'html.parser')
+            
+            dvtabla_div = soup.find('div', {'id': 'dvtabla'})
+            if not dvtabla_div:
+                return render_template('consultas.html', error="No se encontró el contenedor principal de la tabla (div#dvtabla) en la respuesta del navegador.", cuit_consultado=cuit_to_display)
+
+            table = dvtabla_div.find('table', {'id': 'grv'})
+            if not table:
+                return render_template('consultas.html', error="Se encontró el contenedor de la tabla (div#dvtabla), pero no se encontró la tabla (table#grv) dentro.", cuit_consultado=cuit_to_display)
+
+            headers = []
+            thead = table.find('thead')
+            if thead:
+                headers = [header.text.strip() for header in thead.find_all('th')]
+            else:
+                tbody_for_header_check = table.find('tbody')
+                if tbody_for_header_check:
+                    first_row = tbody_for_header_check.find('tr')
+                    if first_row:
+                        headers = [cell.text.strip() for cell in first_row.find_all(['th', 'td'])]
+                
+                if not headers:
+                    return render_template('consultas.html', error="Se encontró la tabla, pero no se pudo encontrar el encabezado (<thead>) ni extraerlo del cuerpo (<tbody>).", cuit_consultado=cuit_to_display)
+            
+            rows = []
+            tbody = table.find('tbody')
+            if tbody:
+                start_row_index = 1 if not thead and headers else 0
+                for row in tbody.find_all('tr')[start_row_index:]:
+                    cells = [cell.text.strip() for cell in row.find_all('td')]
+                    rows.append(cells)
+            else:
+                return render_template('consultas.html', error="Se encontró la tabla, pero no se pudo encontrar el cuerpo (<tbody>).", cuit_consultado=cuit_to_display)
+            
+            tabla_sisa = {'headers': headers, 'rows': rows}
+            return render_template('consultas.html', tabla_sisa=tabla_sisa, cuit_consultado=cuit_to_display)
+
+        except Exception as e:
+            return render_template('consultas.html', error=f"Ocurrió un error con Selenium: {e}", cuit_consultado=cuit_to_display)
+        finally:
+            if driver:
+                driver.quit()
+    else: # GET request
+        cuit_to_display = '30689799228' # Set default for initial load
+
+    return render_template('consultas.html', cuit_consultado=cuit_to_display)
 
 @app.route('/cobranzas')
 def cobranzas():
