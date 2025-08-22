@@ -28,6 +28,7 @@ RUTA_ACOCARPO_DBF = "C:\\acocta5\\acocarpo.dbf"
 RUTA_LIQVEN_DBF = "C:\\acocta5\\liqven.dbf"
 RUTA_ACOGRAN_DBF = "C:\\acocta5\\acogran.dbf"
 RUTA_ACOGRAST_DBF = "C:\\acocta5\\acograst.dbf"
+RUTA_CONTRAT_DBF = "C:\\acocta5\\contrat.dbf"
 
 def format_date(date_obj):
     if isinstance(date_obj, datetime.date):
@@ -163,53 +164,37 @@ def get_contratos_pendientes():
     totales_por_grano_cosecha = {}
     
     try:
-        with DBF(RUTA_ACOCARPO_DBF, encoding='iso-8859-1') as tabla_acocarpo, \
-             DBF(RUTA_LIQVEN_DBF, encoding='iso-8859-1') as tabla_liqven:
+        with DBF(RUTA_CONTRAT_DBF, encoding='iso-8859-1') as tabla_contrat:
+            for rec in tabla_contrat:
+                kiloped = rec.get('KILOPED_C', 0) or 0
+                entrega = rec.get('ENTREGA_C', 0) or 0
 
-            # Cache data from DBF files to avoid re-reading
-            all_acocarpo_recs = list(tabla_acocarpo)
-            all_liqven_recs = list(tabla_liqven)
+                if kiloped > entrega:
+                    diferencia = kiloped - entrega
+                    contrato = rec.get('CONTRATO', 'N/A')
+                    grano_code = rec.get('G_CODI', 'N/A')
+                    cosecha = rec.get('G_COSE', 'N/A')
+                    grano_desc = get_grano_description(grano_code)
+                    comprador = rec.get('NOM_C', 'N/A')
+                    camiones = math.ceil(diferencia / 30000)
 
-            contratos = sorted(list(set(rec['G_CONTRATO'] for rec in all_acocarpo_recs)))
+                    contrato_info = {
+                        'contrato': contrato,
+                        'comprador': comprador,
+                        'grano': grano_desc,
+                        'cosecha': cosecha,
+                        'kilos_pendientes': format_number(diferencia),
+                        'camiones_pendientes': camiones,
+                        'kilos_solicitados': format_number(kiloped),
+                        'kilos_entregados': format_number(entrega)
+                    }
+                    contratos_pendientes.append(contrato_info)
 
-            for contrato in contratos:
-                # Calculate total delivered
-                total_saldo_num = sum(rec['G_SALDO'] for rec in all_acocarpo_recs if rec['G_CONTRATO'] == contrato and rec['G_SALDO'] is not None)
-
-                # Calculate total liquidated
-                total_peso = sum(rec['PESO'] for rec in all_liqven_recs if rec['CONTRATO'] == contrato and rec['PESO'] is not None)
-
-                diferencia = total_saldo_num - total_peso
-
-                if diferencia < 0:
-                    # Get contract details
-                    acocarpo_rec = next((rec for rec in all_acocarpo_recs if rec['G_CONTRATO'] == contrato), None)
-                    liqven_rec = next((rec for rec in all_liqven_recs if rec['CONTRATO'] == contrato), None)
-
-                    if acocarpo_rec:
-                        grano_code = acocarpo_rec.get('G_CODI', 'N/A')
-                        cosecha = acocarpo_rec.get('G_COSE', 'N/A')
-                        grano_desc = get_grano_description(grano_code)
-                        comprador = liqven_rec.get('NOM_C', 'N/A') if liqven_rec else 'N/A'
-                        camiones = math.ceil(abs(diferencia) / 30000)
-
-                        contrato_info = {
-                            'contrato': contrato,
-                            'comprador': comprador,
-                            'grano': grano_desc,
-                            'cosecha': cosecha,
-                            'kilos_liquidados': format_number(total_peso),
-                            'kilos_pendientes': format_number(diferencia),
-                            'camiones_pendientes': camiones
-                        }
-                        contratos_pendientes.append(contrato_info)
-
-                        # Update totals per grain and harvest
-                        if (grano_desc, cosecha) not in totales_por_grano_cosecha:
-                            totales_por_grano_cosecha[(grano_desc, cosecha)] = {'kilos': 0, 'camiones': 0, 'kilos_liquidados': 0}
-                        totales_por_grano_cosecha[(grano_desc, cosecha)]['kilos'] += abs(diferencia)
-                        totales_por_grano_cosecha[(grano_desc, cosecha)]['camiones'] += camiones
-                        totales_por_grano_cosecha[(grano_desc, cosecha)]['kilos_liquidados'] += total_peso
+                    # Update totals per grain and harvest
+                    if (grano_desc, cosecha) not in totales_por_grano_cosecha:
+                        totales_por_grano_cosecha[(grano_desc, cosecha)] = {'kilos': 0, 'camiones': 0}
+                    totales_por_grano_cosecha[(grano_desc, cosecha)]['kilos'] += diferencia
+                    totales_por_grano_cosecha[(grano_desc, cosecha)]['camiones'] += camiones
 
     except FileNotFoundError as e:
         print(f"Error: No se encontró el archivo DBF: {e.filename}")
@@ -232,10 +217,9 @@ def ventas():
         totales_por_grano = {}
         for (grano, cosecha), data in totales_por_grano_cosecha.items():
             if grano not in totales_por_grano:
-                totales_por_grano[grano] = {'kilos': 0, 'camiones': 0, 'kilos_liquidados': 0}
+                totales_por_grano[grano] = {'kilos': 0, 'camiones': 0}
             totales_por_grano[grano]['kilos'] += data['kilos']
             totales_por_grano[grano]['camiones'] += data['camiones']
-            totales_por_grano[grano]['kilos_liquidados'] += data['kilos_liquidados']
             
         pie_chart_labels = list(totales_por_grano.keys())
         pie_chart_values = [totales_por_grano[key]['kilos'] for key in pie_chart_labels]
