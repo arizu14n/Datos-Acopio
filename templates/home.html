@@ -35,6 +35,21 @@
         right: 40%;
         transform: rotate(240deg);
     }
+
+    @media (max-width: 768px) {
+        .home-container {
+            padding-top: 20px;
+        }
+        .cycle-image {
+            display: block;
+            margin: 10px auto;
+            width: 100px; /* Smaller images for mobile */
+            height: 100px;
+        }
+        .arrow {
+            display: none; /* Hide arrows on small screens */
+        }
+    }
 </style>
 {% endblock %}
 

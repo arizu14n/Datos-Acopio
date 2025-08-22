@@ -1,21 +1,168 @@
 {% extends "base.html" %}
 {% block title %}Consultas - Acopio{% endblock %}
 
+{% block head_extra %}
+<style>
+    h1, h2 { color: #333; display: inline-block;}
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; font-size: 14px; background-color: white;}
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    tfoot { font-weight: bold; }
+    tfoot .subtotal { background-color: #f9f9f9; }
+    tfoot .grand-total { background-color: #f2f2f2; }
+    
+    .form-container form {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 20px;
+    }
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .filter-group-row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .form-control {
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+
+    .btn {
+        padding: 8px 12px; 
+        color: white; 
+        text-decoration: none; 
+        border-radius: 4px; 
+        font-size: 14px;
+        border: none;
+        cursor: pointer;
+        height: fit-content;
+    }
+    .btn-primary {
+        background-color: #337ab7;
+    }
+    .btn-warning {
+        background-color: #f0ad4e;
+    }
+
+</style>
+{% endblock %}
+
 {% block content %}
     <h1>Consultas</h1>
+
+    <div class="form-container">
+        <h2>Consulta de Entregas</h2>
+        <form method="POST">
+            <input type="hidden" name="consultar_entregas" value="1">
+            
+            <div class="filter-group">
+                <label>Fechas</label>
+                <div class="filter-group-row">
+                    <input type="date" id="fecha_desde" name="fecha_desde" class="form-control" value="{{ filtros_aplicados.fecha_desde or '' }}" title="Fecha Desde">
+                    <input type="date" id="fecha_hasta" name="fecha_hasta" class="form-control" value="{{ filtros_aplicados.fecha_hasta or '' }}" title="Fecha Hasta">
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Grano y Cosecha</label>
+                <div class="filter-group-row">
+                    <select id="grano" name="grano" class="form-control">
+                        <option value="">Grano: Todos</option>
+                        {% for grano_code, grano_desc in granos %}
+                            <option value="{{ grano_code }}" {% if filtros_aplicados.grano == grano_code %}selected{% endif %}>{{ grano_desc }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="cosecha" name="cosecha" class="form-control">
+                        <option value="">Cosecha: Todas</option>
+                        {% for c in cosechas %}
+                            <option value="{{ c }}" {% if filtros_aplicados.cosecha == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label for="comprador">Comprador</label>
+                <select id="comprador" name="comprador" class="form-control">
+                    <option value="">Todos</option>
+                    {% for comp in compradores %}
+                        <option value="{{ comp }}" {% if filtros_aplicados.comprador == comp %}selected{% endif %}>{{ comp }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-group">
+                 <div class="filter-group-row">
+                    <input type="submit" value="Consultar" class="btn btn-primary">
+                    <a href="{{ url_for('consultas') }}" class="btn btn-warning">Reiniciar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if entregas %}
+        <h2>Resultado de la Consulta de Entregas</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>Contrato</th>
+                    <th>Comprador</th>
+                    <th>Grano</th>
+                    <th>Cosecha</th>
+                    <th>Kilos Netos</th>
+                    <th>CTG</th>
+                    <th>Destino</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entrega in entregas %}
+                    <tr>
+                        <td>{{ entrega.fecha }}</td>
+                        <td>{{ entrega.contrato }}</td>
+                        <td>{{ entrega.comprador }}</td>
+                        <td>{{ entrega.grano }}</td>
+                        <td>{{ entrega.cosecha }}</td>
+                        <td>{{ entrega.kilos_netos }}</td>
+                        <td>{{ entrega.ctg }}</td>
+                        <td>{{ entrega.destino }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+            {% if entregas %}
+            <tfoot>
+                <tr class="grand-total">
+                    <td colspan="5" style="text-align: right;"><strong>Total Kilos Netos:</strong></td>
+                    <td><strong>{{ total_kilos_netos }}</strong></td>
+                    <td colspan="2"></td>
+                </tr>
+            </tfoot>
+            {% endif %}
+        </table>
+    {% endif %}
+
+    <hr>
 
     <div class="form-container">
         <h2>Consulta SISA</h2>
         <form method="POST">
             <label for="cuit">CUIT:</label>
-            <input type="text" id="cuit" name="cuit" value="{{ cuit_consultado or '' }}" pattern="[0-9]*" title="Ingrese solo números">
-            <input type="submit" value="Consultar">
+            <input type="text" id="cuit" name="cuit" class="form-control" value="{{ cuit_consultado or '' }}" pattern="[0-9]*" title="Ingrese solo números">
+            <input type="submit" value="Consultar" class="btn btn-primary">
         </form>
     </div>
 
     {% if tabla_sisa %}
         <h2>Resultado de la Consulta SISA</h2>
-        <table border="1">
+        <table>
             <thead>
                 <tr>
                     {% for header in tabla_sisa.headers %}

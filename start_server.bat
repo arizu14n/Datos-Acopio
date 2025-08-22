@@ -7,7 +7,7 @@ set FLASK_APP=app.py
 
 REM Inicia el servidor de Flask en segundo plano
 echo "Iniciando servidor de Flask..."
-start "Flask Server" /B flask run
+start "Flask Server" /B flask run --host=0.0.0.0
 
 REM Espera un momento para que el servidor se inicie
 timeout /t 5 /nobreak > nul

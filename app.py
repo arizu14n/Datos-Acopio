@@ -162,21 +162,60 @@ def get_stock_granos_por_cosecha():
 def get_contratos_pendientes():
     contratos_pendientes = []
     totales_por_grano_cosecha = {}
-    
+
+    # Pre-calcular la suma de 'Peso' desde liqven.dbf por contrato
+    liquidaciones_por_contrato = {}
+    try:
+        with DBF(RUTA_LIQVEN_DBF, encoding='iso-8859-1') as tabla_liqven:
+            for rec in tabla_liqven:
+                contrato_liq = rec.get('CONTRATO')
+                # Asegurarse de que el contrato es un string y quitar espacios
+                if contrato_liq and isinstance(contrato_liq, str):
+                    contrato_liq = contrato_liq.strip()
+
+                peso_liq = float(rec.get('PESO', 0) or 0)
+                if contrato_liq:
+                    liquidaciones_por_contrato[contrato_liq] = liquidaciones_por_contrato.get(contrato_liq, 0) + peso_liq
+    except FileNotFoundError:
+        print(f"Advertencia: No se encontró el archivo DBF: {RUTA_LIQVEN_DBF}")
+    except Exception as e:
+        print(f"Error al leer {RUTA_LIQVEN_DBF}: {e}")
+
     try:
         with DBF(RUTA_CONTRAT_DBF, encoding='iso-8859-1') as tabla_contrat:
-            for rec in tabla_contrat:
-                kiloped = rec.get('KILOPED_C', 0) or 0
-                entrega = rec.get('ENTREGA_C', 0) or 0
+            for i, rec in enumerate(tabla_contrat):
+                kiloped = 0.0
+                entrega = 0.0
+                liquiya = 0.0
+
+                try:
+                    kiloped = float(rec.get('KILOPED_C', 0) or 0)
+                    entrega = float(rec.get('ENTREGA_C', 0) or 0)
+                    liquiya = float(rec.get('LIQUIYA_C', 0) or 0)
+                except (ValueError, TypeError) as e:
+                    print(f"ERROR: Could not convert values to float for record {i}: {e}. Record data: {rec}")
+                    continue
+
+                if (entrega == liquiya and entrega != 0):
+                    continue
 
                 if kiloped > entrega:
+                    cosecha = rec.get('COSECHA_C', 'N/A')
+                    if cosecha and cosecha < '22/23':
+                        continue
+
                     diferencia = kiloped - entrega
-                    contrato = rec.get('CONTRATO', 'N/A')
-                    grano_code = rec.get('G_CODI', 'N/A')
-                    cosecha = rec.get('G_COSE', 'N/A')
-                    grano_desc = get_grano_description(grano_code)
-                    comprador = rec.get('NOM_C', 'N/A')
+                    contrato = rec.get('NROCONT_C', 'N/A')
+                    # Asegurarse de que el contrato es un string y quitar espacios
+                    if isinstance(contrato, str):
+                        contrato = contrato.strip()
+
+                    grano_desc = rec.get('PRODUCT_C', 'N/A')
+                    comprador = rec.get('APELCOM_C', 'N/A')
                     camiones = math.ceil(diferencia / 30000)
+
+                    # Obtener la suma de kilos liquidados desde el diccionario pre-calculado
+                    kilos_liq_ventas = liquidaciones_por_contrato.get(contrato, 0)
 
                     contrato_info = {
                         'contrato': contrato,
@@ -186,20 +225,25 @@ def get_contratos_pendientes():
                         'kilos_pendientes': format_number(diferencia),
                         'camiones_pendientes': camiones,
                         'kilos_solicitados': format_number(kiloped),
-                        'kilos_entregados': format_number(entrega)
+                        'kilos_entregados': format_number(entrega),
+                        'kilos_liquidados': format_number(liquiya),
+                        'kilos_liq_ventas': kilos_liq_ventas
                     }
                     contratos_pendientes.append(contrato_info)
 
                     # Update totals per grain and harvest
                     if (grano_desc, cosecha) not in totales_por_grano_cosecha:
-                        totales_por_grano_cosecha[(grano_desc, cosecha)] = {'kilos': 0, 'camiones': 0}
+                        totales_por_grano_cosecha[(grano_desc, cosecha)] = {'kilos': 0, 'camiones': 0, 'kilos_liquidados': 0, 'kilos_liq_ventas': 0}
+                    
                     totales_por_grano_cosecha[(grano_desc, cosecha)]['kilos'] += diferencia
                     totales_por_grano_cosecha[(grano_desc, cosecha)]['camiones'] += camiones
+                    totales_por_grano_cosecha[(grano_desc, cosecha)]['kilos_liquidados'] += liquiya
+                    totales_por_grano_cosecha[(grano_desc, cosecha)]['kilos_liq_ventas'] += kilos_liq_ventas
 
     except FileNotFoundError as e:
         print(f"Error: No se encontró el archivo DBF: {e.filename}")
-    except Exception as e:
-        print(f"Ocurrió un error al procesar los contratos: {e}")
+
+
 
     return contratos_pendientes, totales_por_grano_cosecha
 
@@ -362,102 +406,221 @@ def ventas():
     except Exception as e:
         return f"<h1>Ocurrió un error al leer el archivo: {e}</h1>"
 
+def get_filtro_values():
+    granos = {}
+    cosechas = set()
+    compradores = set()
+    
+    try:
+        with DBF(RUTA_ACOGRAN_DBF, encoding='iso-8859-1') as tabla_acogran:
+            for rec in tabla_acogran:
+                if rec.get('G_CODI') and rec.get('G_DESC'):
+                    granos[rec['G_CODI']] = rec['G_DESC'].strip()
+
+        with DBF(RUTA_ACOCARPO_DBF, encoding='iso-8859-1') as tabla_acocarpo:
+            for rec in tabla_acocarpo:
+                if rec.get('G_COSE'):
+                    cosechas.add(rec['G_COSE'].strip())
+        
+        with DBF(RUTA_CONTRAT_DBF, encoding='iso-8859-1') as tabla_contrat:
+            for rec in tabla_contrat:
+                if rec.get('APELCOM_C'):
+                    compradores.add(rec['APELCOM_C'].strip())
+
+    except FileNotFoundError as e:
+        print(f"Error: No se encontró el archivo DBF: {e.filename}")
+    except Exception as e:
+        print(f"Ocurrió un error al leer el archivo: {e}")
+        
+    return sorted(granos.items()), sorted(list(cosechas)), sorted(list(compradores))
+
+def get_entregas(filtros):
+    entregas = []
+    total_kilos_netos = 0
+    try:
+        compradores_map = {}
+        with DBF(RUTA_CONTRAT_DBF, encoding='iso-8859-1') as tabla_contrat:
+            for rec in tabla_contrat:
+                compradores_map[rec['NROCONT_C'].strip()] = rec['APELCOM_C'].strip()
+
+        with DBF(RUTA_ACOCARPO_DBF, encoding='iso-8859-1') as tabla_acocarpo:
+            for rec in tabla_acocarpo:
+                fecha_entrega_str = rec.get('G_FECHA')
+                if isinstance(fecha_entrega_str, (datetime.date)):
+                    fecha_entrega = fecha_entrega_str
+                else:
+                    continue
+
+                if filtros.get('fecha_desde') and fecha_entrega < datetime.datetime.strptime(filtros['fecha_desde'], '%Y-%m-%d').date():
+                    continue
+                if filtros.get('fecha_hasta') and fecha_entrega > datetime.datetime.strptime(filtros['fecha_hasta'], '%Y-%m-%d').date():
+                    continue
+                
+                grano_code = rec.get('G_CODI')
+                if filtros.get('grano') and grano_code != filtros['grano']:
+                    continue
+
+                cosecha = rec.get('G_COSE')
+                if filtros.get('cosecha') and cosecha != filtros['cosecha']:
+                    continue
+
+                contrato = rec.get('G_CONTRATO', '').strip()
+                nombre_comprador = compradores_map.get(contrato, '')
+                if filtros.get('comprador') and nombre_comprador != filtros['comprador']:
+                    continue
+                
+                kilos_netos = rec.get('G_SALDO', 0)
+                total_kilos_netos += kilos_netos
+
+                entrega = {
+                    'fecha': format_date(fecha_entrega),
+                    'contrato': contrato,
+                    'comprador': nombre_comprador,
+                    'grano': get_grano_description(grano_code),
+                    'cosecha': cosecha,
+                    'kilos_netos': format_number(kilos_netos),
+                    'ctg': rec.get('G_CTG', ''),
+                    'destino': rec.get('G_DESTINO', '')
+                }
+                entregas.append(entrega)
+
+    except FileNotFoundError as e:
+        print(f"Error: No se encontró el archivo DBF: {e.filename}")
+    except Exception as e:
+        print(f"Ocurrió un error al leer el archivo: {e}")
+
+    return entregas, total_kilos_netos
+
 @app.route('/consultas', methods=['GET', 'POST'])
 def consultas():
-    cuit_to_display = '' # Default empty
+    # --- Lógica para consulta SISA ---
+    cuit_to_display = ''
+    tabla_sisa = None
+    error_sisa = None
+
+    # --- Lógica para consulta de Entregas ---
+    entregas = None
+    total_kilos_netos = 0
+    filtros_aplicados = {}
+
+    # --- Obtener valores para los filtros ---
+    granos, cosechas, compradores = get_filtro_values()
+
     if request.method == 'POST':
-        cuit = request.form.get('cuit')
-        cuit_to_display = cuit # Keep the searched CUIT for display
-        url = "https://servicioscf.afip.gob.ar/Registros/sisa/sisa.aspx"
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-        from webdriver_manager.chrome import ChromeDriverManager
-        from selenium.webdriver.chrome.service import Service as ChromeService
-        import time
+        # Determinar qué formulario se envió
+        if 'cuit' in request.form:
+            cuit = request.form.get('cuit')
+            cuit_to_display = cuit # Keep the searched CUIT for display
+            url = "https://servicioscf.afip.gob.ar/Registros/sisa/sisa.aspx"
+            from selenium import webdriver
+            from selenium.webdriver.chrome.options import Options
+            from selenium.webdriver.common.by import By
+            from selenium.webdriver.support.ui import WebDriverWait
+            from selenium.webdriver.support import expected_conditions as EC
+            from webdriver_manager.chrome import ChromeDriverManager
+            from selenium.webdriver.chrome.service import Service as ChromeService
+            import time
 
-        driver = None # Initialize driver to None
-        try:
-            chrome_options = Options()
-            chrome_options.add_argument("--headless")
-            chrome_options.add_argument("--disable-gpu")
-            chrome_options.add_argument("--no-sandbox")
-            chrome_options.add_argument("--window-size=1920x1080") # Set a common window size
-            chrome_options.add_argument("--disable-dev-shm-usage") # Overcome limited resource problems
+            driver = None # Initialize driver to None
+            try:
+                chrome_options = Options()
+                chrome_options.add_argument("--headless")
+                chrome_options.add_argument("--disable-gpu")
+                chrome_options.add_argument("--no-sandbox")
+                chrome_options.add_argument("--window-size=1920x1080") # Set a common window size
+                chrome_options.add_argument("--disable-dev-shm-usage") # Overcome limited resource problems
 
-            # Use ChromeDriverManager to automatically download and manage the driver
-            service = ChromeService(ChromeDriverManager().install())
-            driver = webdriver.Chrome(service=service, options=chrome_options)
-            
-            driver.get(url)
-
-            # Wait for the CUIT input field to be present
-            cuit_input = WebDriverWait(driver, 10).until(
-                EC.presence_of_element_located((By.ID, "txtcuit"))
-            )
-            cuit_input.clear()
-            cuit_input.send_keys(cuit)
-
-            # Find and click the "consultar" button
-            consultar_button = WebDriverWait(driver, 10).until(
-                EC.element_to_be_clickable((By.ID, "btnListar"))
-            )
-            consultar_button.click()
-
-            # Wait for the table to be present and visible
-            WebDriverWait(driver, 20).until(
-                EC.visibility_of_element_located((By.ID, "grv"))
-            )
-            
-            # Get the page source after the table has loaded
-            soup = BeautifulSoup(driver.page_source, 'html.parser')
-            
-            dvtabla_div = soup.find('div', {'id': 'dvtabla'})
-            if not dvtabla_div:
-                return render_template('consultas.html', error="No se encontró el contenedor principal de la tabla (div#dvtabla) en la respuesta del navegador.", cuit_consultado=cuit_to_display)
-
-            table = dvtabla_div.find('table', {'id': 'grv'})
-            if not table:
-                return render_template('consultas.html', error="Se encontró el contenedor de la tabla (div#dvtabla), pero no se encontró la tabla (table#grv) dentro.", cuit_consultado=cuit_to_display)
-
-            headers = []
-            thead = table.find('thead')
-            if thead:
-                headers = [header.text.strip() for header in thead.find_all('th')]
-            else:
-                tbody_for_header_check = table.find('tbody')
-                if tbody_for_header_check:
-                    first_row = tbody_for_header_check.find('tr')
-                    if first_row:
-                        headers = [cell.text.strip() for cell in first_row.find_all(['th', 'td'])]
+                # Use ChromeDriverManager to automatically download and manage the driver
+                service = ChromeService(ChromeDriverManager().install())
+                driver = webdriver.Chrome(service=service, options=chrome_options)
                 
-                if not headers:
-                    return render_template('consultas.html', error="Se encontró la tabla, pero no se pudo encontrar el encabezado (<thead>) ni extraerlo del cuerpo (<tbody>).", cuit_consultado=cuit_to_display)
-            
-            rows = []
-            tbody = table.find('tbody')
-            if tbody:
-                start_row_index = 1 if not thead and headers else 0
-                for row in tbody.find_all('tr')[start_row_index:]:
-                    cells = [cell.text.strip() for cell in row.find_all('td')]
-                    rows.append(cells)
-            else:
-                return render_template('consultas.html', error="Se encontró la tabla, pero no se pudo encontrar el cuerpo (<tbody>).", cuit_consultado=cuit_to_display)
-            
-            tabla_sisa = {'headers': headers, 'rows': rows}
-            return render_template('consultas.html', tabla_sisa=tabla_sisa, cuit_consultado=cuit_to_display)
+                driver.get(url)
 
-        except Exception as e:
-            return render_template('consultas.html', error=f"Ocurrió un error con Selenium: {e}", cuit_consultado=cuit_to_display)
-        finally:
-            if driver:
-                driver.quit()
-    else: # GET request
-        cuit_to_display = '30689799228' # Set default for initial load
+                # Wait for the CUIT input field to be present
+                cuit_input = WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.ID, "txtcuit"))
+                )
+                cuit_input.clear()
+                cuit_input.send_keys(cuit)
 
-    return render_template('consultas.html', cuit_consultado=cuit_to_display)
+                # Find and click the "consultar" button
+                consultar_button = WebDriverWait(driver, 10).until(
+                    EC.element_to_be_clickable((By.ID, "btnListar"))
+                )
+                consultar_button.click()
+
+                # Wait for the table to be present and visible
+                WebDriverWait(driver, 20).until(
+                    EC.visibility_of_element_located((By.ID, "grv"))
+                )
+                
+                # Get the page source after the table has loaded
+                soup = BeautifulSoup(driver.page_source, 'html.parser')
+                
+                dvtabla_div = soup.find('div', {'id': 'dvtabla'})
+                if not dvtabla_div:
+                    error_sisa = "No se encontró el contenedor principal de la tabla (div#dvtabla) en la respuesta del navegador."
+
+                else:
+                    table = dvtabla_div.find('table', {'id': 'grv'})
+                    if not table:
+                        error_sisa = "Se encontró el contenedor de la tabla (div#dvtabla), pero no se encontró la tabla (table#grv) dentro."
+                    else:
+                        headers = []
+                        thead = table.find('thead')
+                        if thead:
+                            headers = [header.text.strip() for header in thead.find_all('th')]
+                        else:
+                            tbody_for_header_check = table.find('tbody')
+                            if tbody_for_header_check:
+                                first_row = tbody_for_header_check.find('tr')
+                                if first_row:
+                                    headers = [cell.text.strip() for cell in first_row.find_all(['th', 'td'])]
+                            
+                            if not headers:
+                                error_sisa = "Se encontró la tabla, pero no se pudo encontrar el encabezado (<thead>) ni extraerlo del cuerpo (<tbody>)."
+                        
+                        rows = []
+                        tbody = table.find('tbody')
+                        if tbody:
+                            start_row_index = 1 if not thead and headers else 0
+                            for row in tbody.find_all('tr')[start_row_index:]:
+                                cells = [cell.text.strip() for cell in row.find_all('td')]
+                                rows.append(cells)
+                        else:
+                            error_sisa = "Se encontró la tabla, pero no se pudo encontrar el cuerpo (<tbody>)."
+                        
+                        if not error_sisa:
+                            tabla_sisa = {'headers': headers, 'rows': rows}
+
+            except Exception as e:
+                error_sisa = f"Ocurrió un error con Selenium: {e}"
+            finally:
+                if driver:
+                    driver.quit()
+
+        elif 'consultar_entregas' in request.form:
+            # --- Procesar formulario de Entregas ---
+            filtros = {
+                'fecha_desde': request.form.get('fecha_desde'),
+                'fecha_hasta': request.form.get('fecha_hasta'),
+                'grano': request.form.get('grano'),
+                'cosecha': request.form.get('cosecha'),
+                'comprador': request.form.get('comprador')
+            }
+            entregas, total_kilos_netos = get_entregas(filtros)
+            filtros_aplicados = filtros
+
+    return render_template('consultas.html', 
+                           cuit_consultado=cuit_to_display,
+                           tabla_sisa=tabla_sisa, 
+                           error=error_sisa,
+                           granos=granos,
+                           cosechas=cosechas,
+                           compradores=compradores,
+                           entregas=entregas,
+                           total_kilos_netos=format_number(total_kilos_netos),
+                           filtros_aplicados=filtros_aplicados)
 
 @app.route('/cobranzas')
 def cobranzas():
@@ -591,4 +754,4 @@ def generar_pdf(tipo_reporte):
             os.remove(temp_filename)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', debug=True)
