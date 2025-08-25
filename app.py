@@ -432,7 +432,7 @@ def get_filtro_values():
     except Exception as e:
         print(f"Ocurrió un error al leer el archivo: {e}")
         
-    return sorted(granos.items()), sorted(list(cosechas)), sorted(list(compradores))
+    return sorted(granos.items()), sorted(list(cosechas), reverse=True), sorted(list(compradores))
 
 def get_entregas(filtros):
     entregas = []
