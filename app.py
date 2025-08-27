@@ -684,31 +684,75 @@ def fletes():
 
             if chofer_seleccionado:
                 fletes_data = [rec for rec in fletes_data if rec.get('G_CUILCHOF') and rec.get('G_CUILCHOF').strip() == chofer_seleccionado]
+        else:
+            # --- Fechas por defecto para GET ---
+            today = datetime.date.today()
+            first_day_of_month = today.replace(day=1)
+            filtros_aplicados['fecha_desde'] = first_day_of_month.strftime('%Y-%m-%d')
+            filtros_aplicados['fecha_hasta'] = today.strftime('%Y-%m-%d')
+            
+            # Filtrar por defecto en GET
+            fecha_desde = first_day_of_month
+            fecha_hasta = today
+            fletes_data = [rec for rec in fletes_data if rec.get('G_FECHA') and fecha_desde <= rec.get('G_FECHA') <= fecha_hasta]
+
 
         # --- Ordenamiento ---
         fletes_data.sort(key=lambda x: (x.get('G_CUILCHOF', ''), x.get('G_FECHA', datetime.date.min), x.get('G_CTG', '')))
 
         # --- Procesamiento final y formato ---
         fletes_procesados = []
+        total_neto = 0
+        total_km = 0
+        total_importe = 0
         for rec in fletes_data:
+            kilos_netos = rec.get('O_NETO', 0) or 0
+            tarifa = rec.get('G_TARFLET', 0) or 0
+            
+            try:
+                kilos_netos_float = float(kilos_netos)
+            except (ValueError, TypeError):
+                kilos_netos_float = 0.0
+
+            try:
+                tarifa_float = float(tarifa)
+            except (ValueError, TypeError):
+                tarifa_float = 0.0
+
+            importe = (kilos_netos_float / 1000) * tarifa_float
+            
+            kilometros = rec.get('G_KILOMETR', 0) or 0
+            total_neto += kilos_netos_float
+            total_km += kilometros
+            total_importe += importe
+            
             flete = {
                 'G_FECHA': format_date(rec.get('G_FECHA')), 
                 'G_CTG': rec.get('G_CTG'),
                 'grano': granos_map.get(rec.get('G_CODI'), rec.get('G_CODI')),
                 'G_COSE': rec.get('G_COSE'),
                 'O_PESO': format_number(rec.get('O_PESO', 0)),
-                'O_NETO': format_number(rec.get('O_NETO', 0)),
-                'G_TARFLET': format_number(rec.get('G_TARFLET', 0), is_currency=True),
-                'G_KILOMETR': rec.get('G_KILOMETR'),
-                'localidad': localidades_map.get(rec.get('G_CTADESTI'), rec.get('G_LOCALI'))
+                'O_NETO': format_number(kilos_netos),
+                'G_TARFLET': format_number(tarifa, is_currency=True),
+                'G_KILOMETR': kilometros,
+                'localidad': localidades_map.get(rec.get('G_CTAPLADE'), 'N/A'),
+                'importe': format_number(importe, is_currency=True)
             }
             fletes_procesados.append(flete)
+
+        totales = {
+            'viajes': len(fletes_procesados),
+            'neto': format_number(total_neto),
+            'km': total_km,
+            'importe': format_number(total_importe, is_currency=True)
+        }
 
         return render_template('fletes.html', 
                                fletes=fletes_procesados, 
                                choferes=sorted(list(choferes)),
                                filtros_aplicados=filtros_aplicados,
-                               nombre_chofer=nombre_chofer_seleccionado)
+                               nombre_chofer=nombre_chofer_seleccionado,
+                               totales=totales)
 
     except FileNotFoundError as e:
         return f"<h1>Error: No se encontró el archivo DBF: {e.filename}</h1>"
@@ -845,6 +889,30 @@ def test_choferes():
             return str(next(iter(tabla_choferes)))
     except Exception as e:
         return str(e)
+
+@app.route('/debug-acohis-last10')
+def debug_acohis_last10():
+    try:
+        with DBF(RUTA_ACOHIS_DBF, encoding='iso-8859-1') as tabla_acohis:
+            all_records = list(tabla_acohis) # Read all records into a list
+            last_10_records = all_records[-10:] # Get the last 10 records
+
+            formatted_records = []
+            for rec in last_10_records:
+                formatted_rec = {}
+                for field_name, value in rec.items():
+                    if isinstance(value, datetime.date):
+                        formatted_rec[field_name] = value.strftime('%Y-%m-%d')
+                    else:
+                        formatted_rec[field_name] = value
+                formatted_records.append(formatted_rec)
+
+            return render_template('debug.html', records=formatted_records, dbf_name="acohis.dbf")
+
+    except FileNotFoundError:
+        return f"<h1>Error: No se encontró el archivo DBF: {RUTA_ACOHIS_DBF}</h1>"
+    except Exception as e:
+        return f"<h1>Ocurrió un error al leer el archivo: {e}</h1>"
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)

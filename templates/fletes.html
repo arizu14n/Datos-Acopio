@@ -7,6 +7,7 @@
     table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; background-color: white; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background-color: #f2f2f2; }
+    tfoot { font-weight: bold; background-color: #f2f2f2; }
     .form-container form {
         display: flex;
         flex-wrap: wrap;
@@ -46,6 +47,13 @@
     .btn-warning {
         background-color: #f0ad4e;
     }
+    .km-input {
+        width: 100%;
+        border: none;
+        background-color: transparent;
+        text-align: left;
+        padding: 0;
+    }
 </style>
 {% endblock %}
 
@@ -53,7 +61,7 @@
     <h1>Fletes</h1>
 
     <div class="form-container">
-        <form method="POST">
+        <form method="POST" action="{{ url_for('fletes') }}">
             <div class="filter-group">
                 <label>Fechas</label>
                 <div class="filter-group-row">
@@ -79,7 +87,7 @@
 
             <div class="filter-group">
                  <div class="filter-group-row">
-                    <input type="submit" value="Filtrar" class="btn btn-primary">
+                    <button type="submit" class="btn btn-primary">Filtrar</button>
                     <a href="{{ url_for('fletes') }}" class="btn btn-warning">Reiniciar</a>
                 </div>
             </div>
@@ -96,6 +104,7 @@
                 <th>Peso Origen</th>
                 <th>Neto</th>
                 <th>Tarifa Flete</th>
+                <th>Importe</th>
                 <th>Kilómetros</th>
                 <th>Localidad</th>
             </tr>
@@ -110,15 +119,73 @@
                     <td>{{ flete.O_PESO }}</td>
                     <td>{{ flete.O_NETO }}</td>
                     <td>{{ flete.G_TARFLET }}</td>
-                    <td>{{ flete.G_KILOMETR }}</td>
+                    <td>{{ flete.importe }}</td>
+                    <td><input type="text" class="km-input" value="{{ flete.G_KILOMETR }}"></td>
                     <td>{{ flete.localidad }}</td>
                 </tr>
             {% else %}
                 <tr>
-                    <td colspan="9" style="text-align: center;">No hay datos para mostrar.</td>
+                    <td colspan="10" style="text-align: center;">No hay datos para mostrar.</td>
                 </tr>
             {% endfor %}
         </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="5"><strong>Totales</strong></td>
+                <td id="total-neto"><strong>{{ totales.neto }}</strong></td>
+                <td></td>
+                <td id="total-importe"><strong>{{ totales.importe }}</strong></td>
+                <td id="total-km"><strong>{{ totales.km }}</strong></td>
+                <td><strong>Viajes: {{ totales.viajes }}</strong></td>
+            </tr>
+        </tfoot>
     </table>
 
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const kmInputs = document.querySelectorAll('.km-input');
+    const totalKmCell = document.getElementById('total-km');
+
+    const updateAndFormatTotal = () => {
+        let total = 0;
+        kmInputs.forEach(input => {
+            const value = parseInt(input.value, 10);
+            if (!isNaN(value)) {
+                total += value;
+            }
+        });
+        totalKmCell.innerHTML = `<strong>${total.toLocaleString('es-AR')}</strong>`;
+    };
+
+    kmInputs.forEach(input => {
+        input.addEventListener('keydown', (event) => {
+            // Allow: backspace, delete, tab, escape, enter
+            if ([46, 8, 9, 27, 13].indexOf(event.keyCode) !== -1 ||
+                // Allow: Ctrl+A, Command+A
+                (event.keyCode === 65 && (event.ctrlKey === true || event.metaKey === true)) ||
+                // Allow: home, end, left, right, down, up
+                (event.keyCode >= 35 && event.keyCode <= 40)) {
+                // let it happen, don't do anything
+                return;
+            }
+            // Ensure that it is a number and stop the keypress
+            if ((event.shiftKey || (event.keyCode < 48 || event.keyCode > 57)) && (event.keyCode < 96 || event.keyCode > 105)) {
+                event.preventDefault();
+            }
+        });
+
+        input.addEventListener('input', () => {
+            // Fallback for paste, etc.
+            input.value = input.value.replace(/\D/g, '');
+            updateAndFormatTotal();
+        });
+    });
+
+    // Initial calculation
+    updateAndFormatTotal();
+});
+</script>
 {% endblock %}
