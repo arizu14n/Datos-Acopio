@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Fletes - Acopio{% endblock %}
+
+{% block head_extra %}
+<style>
+    h1, h2 { color: #333; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; background-color: white; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+    th { background-color: #f2f2f2; }
+    .form-container form {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: flex-end;
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+    .filter-group {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    .filter-group-row {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        gap: 10px;
+    }
+    .form-control {
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+    }
+    .btn {
+        padding: 8px 12px; 
+        color: white; 
+        text-decoration: none; 
+        border-radius: 4px; 
+        font-size: 14px;
+        border: none;
+        cursor: pointer;
+        height: fit-content;
+    }
+    .btn-primary {
+        background-color: #337ab7;
+    }
+    .btn-warning {
+        background-color: #f0ad4e;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+    <h1>Fletes</h1>
+
+    <div class="form-container">
+        <form method="POST">
+            <div class="filter-group">
+                <label>Fechas</label>
+                <div class="filter-group-row">
+                    <input type="date" id="fecha_desde" name="fecha_desde" class="form-control" value="{{ filtros_aplicados.fecha_desde or '' }}" title="Fecha Desde">
+                    <input type="date" id="fecha_hasta" name="fecha_hasta" class="form-control" value="{{ filtros_aplicados.fecha_hasta or '' }}" title="Fecha Hasta">
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label for="chofer">Chofer</label>
+                <div class="filter-group-row">
+                    <select id="chofer" name="chofer" class="form-control">
+                        <option value="">Todos</option>
+                        {% for chofer in choferes %}
+                            <option value="{{ chofer }}" {% if filtros_aplicados.chofer == chofer %}selected{% endif %}>{{ chofer }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if nombre_chofer %}
+                        <span class="form-control" style="background-color: #eee;">{{ nombre_chofer }}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="filter-group">
+                 <div class="filter-group-row">
+                    <input type="submit" value="Filtrar" class="btn btn-primary">
+                    <a href="{{ url_for('fletes') }}" class="btn btn-warning">Reiniciar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Fecha</th>
+                <th>CTG</th>
+                <th>Grano</th>
+                <th>Cosecha</th>
+                <th>Peso Origen</th>
+                <th>Neto</th>
+                <th>Tarifa Flete</th>
+                <th>Kilómetros</th>
+                <th>Localidad</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for flete in fletes %}
+                <tr>
+                    <td>{{ flete.G_FECHA }}</td>
+                    <td>{{ flete.G_CTG }}</td>
+                    <td>{{ flete.grano }}</td>
+                    <td>{{ flete.G_COSE }}</td>
+                    <td>{{ flete.O_PESO }}</td>
+                    <td>{{ flete.O_NETO }}</td>
+                    <td>{{ flete.G_TARFLET }}</td>
+                    <td>{{ flete.G_KILOMETR }}</td>
+                    <td>{{ flete.localidad }}</td>
+                </tr>
+            {% else %}
+                <tr>
+                    <td colspan="9" style="text-align: center;">No hay datos para mostrar.</td>
+                </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+{% endblock %}

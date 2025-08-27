@@ -29,6 +29,9 @@ RUTA_LIQVEN_DBF = "C:\\acocta5\\liqven.dbf"
 RUTA_ACOGRAN_DBF = "C:\\acocta5\\acogran.dbf"
 RUTA_ACOGRAST_DBF = "C:\\acocta5\\acograst.dbf"
 RUTA_CONTRAT_DBF = "C:\\acocta5\\contrat.dbf"
+RUTA_ACOHIS_DBF = "C:\\acocta5\\acohis.dbf"
+RUTA_SYSMAE_DBF = "C:\\acocta5\\sysmae.dbf"
+RUTA_CHOFERES_DBF = "C:\\acocta5\\choferes.dbf"
 
 def format_date(date_obj):
     if isinstance(date_obj, datetime.date):
@@ -626,9 +629,91 @@ def consultas():
 def cobranzas():
     return render_template('placeholder.html', title="Cobranzas")
 
-@app.route('/fletes')
+@app.route('/fletes', methods=['GET', 'POST'])
 def fletes():
-    return render_template('placeholder.html', title="Fletes")
+    try:
+        # --- Mapeo de Granos ---
+        granos_map = {}
+        with DBF(RUTA_ACOGRAN_DBF, encoding='iso-8859-1') as tabla_acogran:
+            for rec in tabla_acogran:
+                granos_map[rec['G_CODI']] = rec['G_DESC'].strip()
+
+        # --- Mapeo de Localidades ---
+        localidades_map = {}
+        with DBF(RUTA_SYSMAE_DBF, encoding='iso-8859-1') as tabla_sysmae:
+            for rec in tabla_sysmae:
+                localidades_map[rec['CLI_C']] = rec['S_LOCALI'].strip()
+
+        # --- Mapeo de Choferes ---
+        choferes_map = {}
+        with DBF(RUTA_CHOFERES_DBF, encoding='iso-8859-1') as tabla_choferes:
+            for rec in tabla_choferes:
+                choferes_map[rec['C_DOCUMENT'].strip()] = rec['C_NOMBRE'].strip()
+
+        # --- Lectura y pre-filtrado de Fletes ---
+        fletes_data = []
+        choferes = set()
+        with DBF(RUTA_ACOHIS_DBF, encoding='iso-8859-1') as tabla_acohis:
+            for rec in tabla_acohis:
+                if rec.get('G_CUITRAN') == '30-68979922-8' and rec.get('G_CTL') == 'V':
+                    cosecha = rec.get('G_COSE', '')
+                    if cosecha and cosecha >= '20/21':
+                        fletes_data.append(rec)
+                        if rec.get('G_CUILCHOF'):
+                            choferes.add(rec.get('G_CUILCHOF').strip())
+
+        # --- Aplicar filtros del formulario ---
+        filtros_aplicados = {}
+        nombre_chofer_seleccionado = None
+        if request.method == 'POST':
+            filtros_aplicados['fecha_desde'] = request.form.get('fecha_desde')
+            filtros_aplicados['fecha_hasta'] = request.form.get('fecha_hasta')
+            chofer_seleccionado = request.form.get('chofer')
+            filtros_aplicados['chofer'] = chofer_seleccionado
+
+            if chofer_seleccionado:
+                nombre_chofer_seleccionado = choferes_map.get(chofer_seleccionado)
+
+            if filtros_aplicados['fecha_desde']:
+                fecha_desde = datetime.datetime.strptime(filtros_aplicados['fecha_desde'], '%Y-%m-%d').date()
+                fletes_data = [rec for rec in fletes_data if rec.get('G_FECHA') and rec.get('G_FECHA') >= fecha_desde]
+            
+            if filtros_aplicados['fecha_hasta']:
+                fecha_hasta = datetime.datetime.strptime(filtros_aplicados['fecha_hasta'], '%Y-%m-%d').date()
+                fletes_data = [rec for rec in fletes_data if rec.get('G_FECHA') and rec.get('G_FECHA') <= fecha_hasta]
+
+            if chofer_seleccionado:
+                fletes_data = [rec for rec in fletes_data if rec.get('G_CUILCHOF') and rec.get('G_CUILCHOF').strip() == chofer_seleccionado]
+
+        # --- Ordenamiento ---
+        fletes_data.sort(key=lambda x: (x.get('G_CUILCHOF', ''), x.get('G_FECHA', datetime.date.min), x.get('G_CTG', '')))
+
+        # --- Procesamiento final y formato ---
+        fletes_procesados = []
+        for rec in fletes_data:
+            flete = {
+                'G_FECHA': format_date(rec.get('G_FECHA')), 
+                'G_CTG': rec.get('G_CTG'),
+                'grano': granos_map.get(rec.get('G_CODI'), rec.get('G_CODI')),
+                'G_COSE': rec.get('G_COSE'),
+                'O_PESO': format_number(rec.get('O_PESO', 0)),
+                'O_NETO': format_number(rec.get('O_NETO', 0)),
+                'G_TARFLET': format_number(rec.get('G_TARFLET', 0), is_currency=True),
+                'G_KILOMETR': rec.get('G_KILOMETR'),
+                'localidad': localidades_map.get(rec.get('G_CTADESTI'), rec.get('G_LOCALI'))
+            }
+            fletes_procesados.append(flete)
+
+        return render_template('fletes.html', 
+                               fletes=fletes_procesados, 
+                               choferes=sorted(list(choferes)),
+                               filtros_aplicados=filtros_aplicados,
+                               nombre_chofer=nombre_chofer_seleccionado)
+
+    except FileNotFoundError as e:
+        return f"<h1>Error: No se encontró el archivo DBF: {e.filename}</h1>"
+    except Exception as e:
+        return f"<h1>Ocurrió un error al leer el archivo: {e}</h1>"
 
 @app.route('/pdf/<tipo_reporte>')
 def generar_pdf(tipo_reporte):
@@ -716,7 +801,7 @@ def generar_pdf(tipo_reporte):
                 sumas_pdf['Total'] += registro.get('NET_CTA', 0) or 0
 
                 fac_c_padded = str(registro.get('FAC_C', '')).zfill(8)
-                coe_val = f"{registro.get('FA1_C', '')}-{fac_c_padded}"
+                coe_val = f"{rec.get('FA1_C', '')}-{fac_c_padded}"
 
                 row_data = OrderedDict()
                 row_data['Fecha'] = format_date(registro.get('FEC_C', ''))
@@ -752,6 +837,14 @@ def generar_pdf(tipo_reporte):
     finally:
         if os.path.exists(temp_filename):
             os.remove(temp_filename)
+
+@app.route('/test_choferes')
+def test_choferes():
+    try:
+        with DBF(RUTA_CHOFERES_DBF, encoding='iso-8859-1') as tabla_choferes:
+            return str(next(iter(tabla_choferes)))
+    except Exception as e:
+        return str(e)
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
