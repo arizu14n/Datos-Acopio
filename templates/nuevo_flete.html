@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Flete{% endblock %}
+
+{% block head_extra %}
+<style>
+    .form-container {
+        max-width: 800px;
+        margin: 2rem auto;
+        padding: 2rem;
+        background-color: #ffffff;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    .form-label {
+        font-weight: bold;
+        color: #333;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    .form-control, .form-select {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        box-sizing: border-box; /* Important for padding and width */
+        height: 38px; /* Match filter inputs height */
+    }
+    .btn {
+        padding: 8px 12px; 
+        color: white; 
+        text-decoration: none; 
+        border-radius: 4px; 
+        font-size: 14px;
+        border: none;
+        cursor: pointer;
+        height: fit-content;
+    }
+    .btn-primary {
+        background-color: #337ab7;
+    }
+    .btn-secondary {
+        background-color: #6c757d;
+    }
+    .mb-3 {
+        margin-bottom: 1rem !important;
+    }
+    .mt-4 {
+        margin-top: 1.5rem !important;
+    }
+    .row {
+        display: flex;
+        flex-wrap: wrap;
+        margin-right: -15px;
+        margin-left: -15px;
+    }
+    .col-md-4, .col-md-3 {
+        position: relative;
+        width: 100%;
+        padding-right: 15px;
+        padding-left: 15px;
+    }
+    @media (min-width: 768px) {
+        .col-md-4 {
+            flex: 0 0 33.333333%;
+            max-width: 33.333333%;
+        }
+        .col-md-3 {
+            flex: 0 0 25%;
+            max-width: 25%;
+        }
+    }
+    .d-flex {
+        display: flex !important;
+    }
+    .justify-content-center {
+        justify-content: center !important;
+    }
+    .gap-2 {
+        gap: 0.5rem !important;
+    }
+    .text-center {
+        text-align: center !important;
+    }
+    .my-4 {
+        margin-top: 1.5rem !important;
+        margin-bottom: 1.5rem !important;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="my-4 text-center">Cargar Nuevo Flete Manualmente</h1>
+
+    <form method="POST">
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="g_fecha" class="form-label">Fecha</label>
+                <input type="date" class="form-control" id="g_fecha" name="g_fecha" value="{{ today_date }}" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="g_ctg" class="form-label">CTG</label>
+                <input type="text" class="form-control" id="g_ctg" name="g_ctg" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="g_cuilchof" class="form-label">Chofer</label>
+                <select class="form-select" id="g_cuilchof" name="g_cuilchof" required>
+                    <option selected disabled value="">Seleccionar...</option>
+                    {% for cuil, nombre in choferes.items() %}
+                    <option value="{{ cuil }}">{{ nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="g_codi" class="form-label">Grano</label>
+                <select class="form-select" id="g_codi" name="g_codi" required>
+                    <option selected disabled value="">Seleccionar...</option>
+                    {% for codigo, desc in granos.items() %}
+                    <option value="{{ codigo }}">{{ desc }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="g_cose" class="form-label">Cosecha</label>
+                <input type="text" class="form-control" id="g_cose" name="g_cose">
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="g_ctaplade" class="form-label">Localidad</label>
+                <select class="form-select" id="g_ctaplade" name="g_ctaplade">
+                    <option selected disabled value="">Seleccionar...</option>
+                    {% for codigo, nombre in localidades.items() %}
+                    <option value="{{ codigo }}">{{ nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <label for="o_peso" class="form-label">Kilos Brutos</label>
+                <input type="number" step="0.01" class="form-control" id="o_peso" name="o_peso" required>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="o_neto" class="form-label">Kilos Netos</label>
+                <input type="number" step="0.01" class="form-control" id="o_neto" name="o_neto" required>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="g_tarflet" class="form-label">Tarifa</label>
+                <input type="number" step="0.01" class="form-control" id="g_tarflet" name="g_tarflet" required>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="g_kilomet" class="form-label">Kilómetros</label>
+                <input type="number" class="form-control" id="g_kilomet" name="g_kilomet" required>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-center gap-2 mt-4">
+            <button type="submit" class="btn btn-primary">Guardar Flete</button>
+            <a href="{{ url_for('fletes') }}" class="btn btn-secondary">Volver</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

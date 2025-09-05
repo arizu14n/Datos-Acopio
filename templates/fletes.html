@@ -47,6 +47,12 @@
     .btn-warning {
         background-color: #f0ad4e;
     }
+    .btn-success {
+        background-color: #5cb85c;
+    }
+    .btn-info {
+        background-color: #5bc0de;
+    }
     .km-input {
         width: 100%;
         border: none;
@@ -89,6 +95,8 @@
                  <div class="filter-group-row">
                     <button type="submit" class="btn btn-primary">Filtrar</button>
                     <a href="{{ url_for('fletes') }}" class="btn btn-warning">Reiniciar</a>
+                    <a href="{{ url_for('importar_fletes_route') }}" class="btn btn-success">Importar Fletes desde DBF</a>
+                    <a href="{{ url_for('nuevo_flete') }}" class="btn btn-info">Cargar Flete Manual</a>
                 </div>
             </div>
         </form>
@@ -106,12 +114,13 @@
                 <th>Tarifa Flete</th>
                 <th>Importe</th>
                 <th>Kilómetros</th>
+                <th></th>
                 <th>Localidad</th>
             </tr>
         </thead>
         <tbody>
             {% for flete in fletes %}
-                <tr>
+                <tr data-id="{{ flete.id }}">
                     <td>{{ flete.G_FECHA }}</td>
                     <td>{{ flete.G_CTG }}</td>
                     <td>{{ flete.grano }}</td>
@@ -121,11 +130,12 @@
                     <td>{{ flete.G_TARFLET }}</td>
                     <td>{{ flete.importe }}</td>
                     <td><input type="text" class="km-input" value="{{ flete.G_KILOMETR }}"></td>
+                    <td><button class="btn btn-primary btn-sm save-km">Guardar</button></td>
                     <td>{{ flete.localidad }}</td>
                 </tr>
             {% else %}
                 <tr>
-                    <td colspan="10" style="text-align: center;">No hay datos para mostrar.</td>
+                    <td colspan="11" style="text-align: center;">No hay datos para mostrar.</td>
                 </tr>
             {% endfor %}
         </tbody>
@@ -136,6 +146,7 @@
                 <td></td>
                 <td id="total-importe"><strong>{{ totales.importe }}</strong></td>
                 <td id="total-km"><strong>{{ totales.km }}</strong></td>
+                <td></td>
                 <td><strong>Viajes: {{ totales.viajes }}</strong></td>
             </tr>
         </tfoot>
@@ -146,6 +157,38 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    const saveButtons = document.querySelectorAll('.save-km');
+
+    saveButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const row = this.closest('tr');
+            const id = row.dataset.id;
+            const kmInput = row.querySelector('.km-input');
+            const km = kmInput.value;
+
+            const formData = new FormData();
+            formData.append('id', id);
+            formData.append('km', km);
+
+            fetch("{{ url_for('update_km') }}", {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                if(data.success) {
+                    alert('Kilómetros actualizados correctamente.');
+                } else {
+                    alert('Error al actualizar los kilómetros: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Ocurrió un error de red.');
+            });
+        });
+    });
+
     const kmInputs = document.querySelectorAll('.km-input');
     const totalKmCell = document.getElementById('total-km');
 

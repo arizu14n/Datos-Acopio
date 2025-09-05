@@ -1,6 +1,6 @@
 # app.py
 
-from flask import Flask, render_template, request, Response
+from flask import Flask, render_template, request, Response, redirect, url_for, jsonify
 from dbfread import DBF
 from collections import OrderedDict
 from fpdf import FPDF
@@ -11,6 +11,7 @@ from decimal import Decimal
 import math
 import requests
 from bs4 import BeautifulSoup
+import sqlite3
 
 # --- CONFIGURACIÓN DE LOCALIZACIÓN PARA FORMATO DE NÚMEROS ---
 try:
@@ -22,6 +23,41 @@ except locale.Error:
         print("Advertencia: No se pudo establecer la localización a es_AR. Los formatos de número pueden ser incorrectos.")
 
 app = Flask(__name__)
+
+# --- CONFIGURACIÓN DE LA BASE DE DATOS SQLITE ---
+DATABASE = 'c:/Tests/Acopio/fletes.db'
+
+def get_db():
+    db = sqlite3.connect(DATABASE)
+    db.row_factory = sqlite3.Row
+    return db
+
+def init_db():
+    db = get_db()
+    with db:
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS fletes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                g_fecha TEXT NOT NULL,
+                g_ctg TEXT UNIQUE NOT NULL,
+                g_codi TEXT,
+                g_cose TEXT,
+                o_peso REAL,
+                o_neto REAL,
+                g_tarflet REAL,
+                g_kilomet REAL,
+                g_ctaplade TEXT,
+                g_cuilchof TEXT,
+                importe REAL,
+                fuente TEXT NOT NULL
+            )
+        """)
+    print("Base de datos inicializada.")
+
+@app.cli.command('init-db')
+def init_db_command():
+    """Crea la base de datos."""
+    init_db()
 
 # --- CONFIGURACIÓN DE RUTAS ---
 RUTA_ACOCARPO_DBF = "C:\\acocta5\\acocarpo.dbf"
@@ -629,61 +665,218 @@ def consultas():
 def cobranzas():
     return render_template('placeholder.html', title="Cobranzas")
 
-@app.route('/fletes', methods=['GET', 'POST'])
-def fletes():
+def importar_fletes_desde_dbf():
     try:
-        # --- Mapeo de Granos ---
-        granos_map = {}
-        with DBF(RUTA_ACOGRAN_DBF, encoding='iso-8859-1') as tabla_acogran:
-            for rec in tabla_acogran:
-                granos_map[rec['G_CODI']] = rec['G_DESC'].strip()
-
-        # --- Mapeo de Localidades ---
-        localidades_map = {}
-        with DBF(RUTA_SYSMAE_DBF, encoding='iso-8859-1') as tabla_sysmae:
-            for rec in tabla_sysmae:
-                localidades_map[rec['CLI_C']] = rec['S_LOCALI'].strip()
-
-        # --- Mapeo de Choferes ---
-        choferes_map = {}
-        with DBF(RUTA_CHOFERES_DBF, encoding='iso-8859-1') as tabla_choferes:
-            for rec in tabla_choferes:
-                choferes_map[rec['C_DOCUMENT'].strip()] = rec['C_NOMBRE'].strip()
-
-        # --- Lectura y pre-filtrado de Fletes ---
-        fletes_data = []
-        choferes = set()
         with DBF(RUTA_ACOHIS_DBF, encoding='iso-8859-1') as tabla_acohis:
+            fletes_data = []
             for rec in tabla_acohis:
                 if rec.get('G_CUITRAN') == '30-68979922-8' and rec.get('G_CTL') == 'V':
                     cosecha = rec.get('G_COSE', '')
                     if cosecha and cosecha >= '20/21':
                         fletes_data.append(rec)
-                        if rec.get('G_CUILCHOF'):
-                            choferes.add(rec.get('G_CUILCHOF').strip())
 
-        # --- Aplicar filtros del formulario ---
+        db = get_db()
+        with db:
+            cursor = db.cursor()
+            added_count = 0
+            skipped_count = 0
+            for rec in fletes_data:
+                g_ctg = rec.get('G_CTG')
+                if not g_ctg:
+                    skipped_count += 1
+                    continue
+
+                cursor.execute("SELECT id FROM fletes WHERE g_ctg = ?", (g_ctg,))
+                exists = cursor.fetchone()
+
+                if exists:
+                    skipped_count += 1
+                    continue
+
+                kilos_netos = rec.get('O_NETO', 0) or 0
+                tarifa = rec.get('G_TARFLET', 0) or 0
+                try:
+                    kilos_netos_float = float(kilos_netos)
+                except (ValueError, TypeError):
+                    kilos_netos_float = 0.0
+                try:
+                    tarifa_float = float(tarifa)
+                except (ValueError, TypeError):
+                    tarifa_float = 0.0
+
+                importe = (kilos_netos_float / 1000) * tarifa_float
+
+                cursor.execute("""
+                    INSERT INTO fletes (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, fuente)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    rec.get('G_FECHA').strftime('%Y-%m-%d') if isinstance(rec.get('G_FECHA'), datetime.date) else None,
+                    g_ctg,
+                    rec.get('G_CODI'),
+                    rec.get('G_COSE'),
+                    rec.get('O_PESO'),
+                    kilos_netos_float,
+                    tarifa_float,
+                    rec.get('G_KILOMETR') *2,
+                    rec.get('G_CTAPLADE'),
+                    rec.get('G_CUILCHOF'),
+                    importe,
+                    'dbf'
+                ))
+                added_count += 1
+        
+        return f"Importación completada. {added_count} registros agregados, {skipped_count} registros omitidos (duplicados o sin CTG)."
+
+    except FileNotFoundError:
+        return f"Error: No se encontró el archivo DBF: {RUTA_ACOHIS_DBF}"
+    except Exception as e:
+        return f"Ocurrió un error durante la importación: {e}"
+
+@app.route('/fletes/importar')
+def importar_fletes_route():
+    mensaje = importar_fletes_desde_dbf()
+    return render_template('placeholder.html', title="Importar Fletes", message=mensaje, back_url=url_for('fletes'))
+
+@app.route('/fletes/update_km', methods=['POST'])
+def update_km():
+    try:
+        flete_id = request.form['id']
+        km = request.form['km'] 
+        
+        db = get_db()
+        with db:
+            db.execute("UPDATE fletes SET g_kilomet = ? WHERE id = ?", (km, flete_id))
+        
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/fletes/nuevo', methods=['GET', 'POST'])
+def nuevo_flete():
+    if request.method == 'POST':
+        try:
+            g_fecha = request.form['g_fecha']
+            g_ctg = request.form['g_ctg']
+            g_codi = request.form['g_codi']
+            g_cose = request.form['g_cose']
+            o_peso = float(request.form['o_peso'])
+            o_neto = float(request.form['o_neto'])
+            g_tarflet = float(request.form['g_tarflet'])
+            g_kilomet = int(request.form['g_kilomet'])
+            g_ctaplade = request.form['g_ctaplade']
+            g_cuilchof = request.form['g_cuilchof']
+            
+            importe = (o_neto / 1000) * g_tarflet
+
+            db = get_db()
+            with db:
+                db.execute("""
+                    INSERT INTO fletes (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, fuente)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, 'manual'))
+            
+            return redirect(url_for('fletes'))
+        except sqlite3.IntegrityError:
+            return "Error: El CTG ya existe."
+        except Exception as e:
+            return f"Error al guardar el flete: {e}"
+
+    # Para GET, obtener datos para los dropdowns
+    granos_map = {}
+    with DBF(RUTA_ACOGRAN_DBF, encoding='iso-8859-1') as tabla_acogran:
+        for rec in tabla_acogran:
+            granos_map[rec['G_CODI']] = rec['G_DESC'].strip()
+
+    choferes_map = {}
+    with DBF(RUTA_CHOFERES_DBF, encoding='iso-8859-1') as tabla_choferes:
+        for rec in tabla_choferes:
+            if rec.get('C_DOCUMENT') and rec.get('C_NOMBRE'):
+                choferes_map[rec['C_DOCUMENT'].strip()] = rec['C_NOMBRE'].strip()
+    
+    # Ordenar choferes por nombre
+    sorted_choferes = OrderedDict(sorted(choferes_map.items(), key=lambda item: item[1]))
+
+    localidades_map = {}
+    with DBF(RUTA_SYSMAE_DBF, encoding='iso-8859-1') as tabla_sysmae:
+        for rec in tabla_sysmae:
+            if rec.get('CLI_C') and rec.get('S_LOCALI'):
+                localidades_map[rec['CLI_C'].strip()] = rec['S_LOCALI'].strip()
+
+    # Ordenar localidades por nombre
+    sorted_localidades = OrderedDict(sorted(localidades_map.items(), key=lambda item: item[1]))
+
+    today_date = datetime.date.today().strftime('%Y-%m-%d')
+            
+    return render_template('nuevo_flete.html', 
+                           granos=granos_map, 
+                           choferes=sorted_choferes, 
+                           localidades=sorted_localidades,
+                           today_date=today_date)
+
+@app.route('/fletes', methods=['GET', 'POST'])
+def fletes():
+    try:
+        # --- Mapeo de Granos, Localidades, Choferes (se mantiene igual) ---
+        granos_map = {}
+        with DBF(RUTA_ACOGRAN_DBF, encoding='iso-8859-1') as tabla_acogran:
+            for rec in tabla_acogran:
+                granos_map[rec['G_CODI']] = rec['G_DESC'].strip()
+
+        localidades_map = {}
+        with DBF(RUTA_SYSMAE_DBF, encoding='iso-8859-1') as tabla_sysmae:
+            for rec in tabla_sysmae:
+                localidades_map[rec['CLI_C']] = rec['S_LOCALI'].strip()
+
+        choferes_map = {}
+        with DBF(RUTA_CHOFERES_DBF, encoding='iso-8859-1') as tabla_choferes:
+            for rec in tabla_choferes:
+                choferes_map[rec['C_DOCUMENT'].strip()] = rec['C_NOMBRE'].strip()
+        
+        # Obtener CUILs de choferes que tienen registros en la tabla 'fletes'
+        db = get_db()
+        cuils_con_registros = set()
+        with db:
+            cursor = db.cursor()
+            cursor.execute("SELECT DISTINCT g_cuilchof FROM fletes WHERE g_cuilchof IS NOT NULL AND g_cuilchof != ''")
+            for row in cursor.fetchall():
+                cuils_con_registros.add(row['g_cuilchof'].strip())
+
+        # Filtrar choferes_map para incluir solo aquellos con registros
+        choferes_filtrados = {
+            cuil: nombre for cuil, nombre in choferes_map.items()
+            if cuil in cuils_con_registros
+        }
+
+        choferes_set = set(choferes_filtrados.keys())
+
+        # --- Obtener datos desde la base de datos ---
+        db = get_db()
+        cursor = db.cursor()
+        
+        query = "SELECT * FROM fletes"
+        params = []
+
         filtros_aplicados = {}
-        nombre_chofer_seleccionado = None
         if request.method == 'POST':
             filtros_aplicados['fecha_desde'] = request.form.get('fecha_desde')
             filtros_aplicados['fecha_hasta'] = request.form.get('fecha_hasta')
             chofer_seleccionado = request.form.get('chofer')
             filtros_aplicados['chofer'] = chofer_seleccionado
 
+            conditions = []
+            if filtros_aplicados.get('fecha_desde'):
+                conditions.append("g_fecha >= ?")
+                params.append(filtros_aplicados['fecha_desde'])
+            if filtros_aplicados.get('fecha_hasta'):
+                conditions.append("g_fecha <= ?")
+                params.append(filtros_aplicados['fecha_hasta'])
             if chofer_seleccionado:
-                nombre_chofer_seleccionado = choferes_map.get(chofer_seleccionado)
-
-            if filtros_aplicados['fecha_desde']:
-                fecha_desde = datetime.datetime.strptime(filtros_aplicados['fecha_desde'], '%Y-%m-%d').date()
-                fletes_data = [rec for rec in fletes_data if rec.get('G_FECHA') and rec.get('G_FECHA') >= fecha_desde]
+                conditions.append("g_cuilchof = ?")
+                params.append(chofer_seleccionado)
             
-            if filtros_aplicados['fecha_hasta']:
-                fecha_hasta = datetime.datetime.strptime(filtros_aplicados['fecha_hasta'], '%Y-%m-%d').date()
-                fletes_data = [rec for rec in fletes_data if rec.get('G_FECHA') and rec.get('G_FECHA') <= fecha_hasta]
+            if conditions:
+                query += " WHERE " + " AND ".join(conditions)
 
-            if chofer_seleccionado:
-                fletes_data = [rec for rec in fletes_data if rec.get('G_CUILCHOF') and rec.get('G_CUILCHOF').strip() == chofer_seleccionado]
         else:
             # --- Fechas por defecto para GET ---
             today = datetime.date.today()
@@ -691,73 +884,69 @@ def fletes():
             filtros_aplicados['fecha_desde'] = first_day_of_month.strftime('%Y-%m-%d')
             filtros_aplicados['fecha_hasta'] = today.strftime('%Y-%m-%d')
             
-            # Filtrar por defecto en GET
-            fecha_desde = first_day_of_month
-            fecha_hasta = today
-            fletes_data = [rec for rec in fletes_data if rec.get('G_FECHA') and fecha_desde <= rec.get('G_FECHA') <= fecha_hasta]
+            query += " WHERE g_fecha >= ? AND g_fecha <= ?"
+            params.extend([filtros_aplicados['fecha_desde'], filtros_aplicados['fecha_hasta']])
 
-
-        # --- Ordenamiento ---
-        fletes_data.sort(key=lambda x: (x.get('G_CUILCHOF', ''), x.get('G_FECHA', datetime.date.min), x.get('G_CTG', '')))
+        query += " ORDER BY g_cuilchof, g_fecha, g_ctg"
+        
+        cursor.execute(query, params)
+        fletes_data = cursor.fetchall()
 
         # --- Procesamiento final y formato ---
         fletes_procesados = []
         total_neto = 0
         total_km = 0
         total_importe = 0
+        viajes_con_kilos = 0
         for rec in fletes_data:
-            kilos_netos = rec.get('O_NETO', 0) or 0
-            tarifa = rec.get('G_TARFLET', 0) or 0
-            
-            try:
-                kilos_netos_float = float(kilos_netos)
-            except (ValueError, TypeError):
-                kilos_netos_float = 0.0
+            kilos_netos = rec['o_neto'] or 0
+            if kilos_netos != 0:
+                viajes_con_kilos += 1
 
-            try:
-                tarifa_float = float(tarifa)
-            except (ValueError, TypeError):
-                tarifa_float = 0.0
-
-            importe = (kilos_netos_float / 1000) * tarifa_float
+            tarifa = rec['g_tarflet'] or 0
             
-            kilometros = rec.get('G_KILOMETR', 0) or 0
-            total_neto += kilos_netos_float
+            importe = (kilos_netos / 1000) * tarifa
+            
+            kilometros = rec['g_kilomet'] or 0
+            total_neto += kilos_netos
             total_km += kilometros
             total_importe += importe
             
             flete = {
-                'G_FECHA': format_date(rec.get('G_FECHA')), 
-                'G_CTG': rec.get('G_CTG'),
-                'grano': granos_map.get(rec.get('G_CODI'), rec.get('G_CODI')),
-                'G_COSE': rec.get('G_COSE'),
-                'O_PESO': format_number(rec.get('O_PESO', 0)),
+                'id': rec['id'],
+                'G_FECHA': format_date(datetime.datetime.strptime(rec['g_fecha'], '%Y-%m-%d').date()),
+                'G_CTG': rec['g_ctg'],
+                'grano': granos_map.get(rec['g_codi'], rec['g_codi']),
+                'G_COSE': rec['g_cose'],
+                'O_PESO': format_number(rec['o_peso']),
                 'O_NETO': format_number(kilos_netos),
                 'G_TARFLET': format_number(tarifa, is_currency=True),
                 'G_KILOMETR': kilometros,
-                'localidad': localidades_map.get(rec.get('G_CTAPLADE'), 'N/A'),
+                'localidad': localidades_map.get(rec['g_ctaplade'], 'N/A'),
                 'importe': format_number(importe, is_currency=True)
             }
             fletes_procesados.append(flete)
 
         totales = {
-            'viajes': len(fletes_procesados),
+            'viajes': viajes_con_kilos,
             'neto': format_number(total_neto),
             'km': total_km,
             'importe': format_number(total_importe, is_currency=True)
         }
+        
+        nombre_chofer_seleccionado = None
+        if filtros_aplicados.get('chofer'):
+            nombre_chofer_seleccionado = choferes_map.get(filtros_aplicados['chofer'])
 
         return render_template('fletes.html', 
                                fletes=fletes_procesados, 
-                               choferes=sorted(list(choferes)),
+                               choferes=sorted(list(choferes_set)),
                                filtros_aplicados=filtros_aplicados,
                                nombre_chofer=nombre_chofer_seleccionado,
                                totales=totales)
 
-    except FileNotFoundError as e:
-        return f"<h1>Error: No se encontró el archivo DBF: {e.filename}</h1>"
     except Exception as e:
-        return f"<h1>Ocurrió un error al leer el archivo: {e}</h1>"
+        return f"<h1>Ocurrió un error: {e}</h1>"
 
 @app.route('/pdf/<tipo_reporte>')
 def generar_pdf(tipo_reporte):
