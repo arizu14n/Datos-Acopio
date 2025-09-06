@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Dashboard - Acopio{% endblock %}
+
+{% block head_extra %}
+<style>
+    .dashboard-container {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+        gap: 25px;
+    }
+    .panel {
+        border: none;
+        border-radius: 12px;
+        padding: 25px;
+        color: #fff;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        transition: transform 0.2s ease-in-out;
+    }
+    .panel:hover {
+        transform: translateY(-5px);
+    }
+    .panel h2 {
+        margin-top: 0;
+        font-size: 1.5rem;
+        display: flex;
+        align-items: center;
+    }
+    .panel h2 i {
+        margin-right: 12px;
+        font-size: 1.8rem;
+    }
+    .panel-ventas { background: linear-gradient(135deg, #1e88e5, #42a5f5); } /* Blue */
+    .panel-fletes { background: linear-gradient(135deg, #43a047, #66bb6a); } /* Green */
+    .panel-cobranzas { background: linear-gradient(135deg, #f4511e, #ff7043); } /* Orange */
+    .panel-kpis { background: linear-gradient(135deg, #5e35b1, #7e57c2); } /* Purple */
+
+    .date-filter {
+        margin-bottom: 25px;
+        padding: 15px;
+        border: 1px solid #ddd;
+        border-radius: 12px;
+        background-color: #fff;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        display: flex;
+        align-items: center;
+        gap: 15px;
+    }
+    .date-filter label {
+        font-weight: bold;
+    }
+    .date-filter input[type="date"] {
+        padding: 8px;
+        border-radius: 6px;
+        border: 1px solid #ccc;
+    }
+    .date-filter button {
+        padding: 8px 16px;
+        border-radius: 6px;
+        border: none;
+        background-color: #2e7d32;
+        color: white;
+        font-weight: bold;
+        cursor: pointer;
+        transition: background-color 0.2s;
+    }
+    .date-filter button:hover {
+        background-color: #388e3c;
+    }
+
+    .summary-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+    }
+    .summary-table th, .summary-table td {
+        padding: 10px;
+        text-align: left;
+        border-bottom: 1px solid rgba(255,255,255,0.2);
+    }
+    .summary-table th {
+        font-weight: bold;
+        font-size: 0.9rem;
+        text-transform: uppercase;
+        opacity: 0.8;
+    }
+    .summary-table p {
+        font-size: 1.2rem;
+        font-weight: bold;
+        margin: 10px 0;
+    }
+    .numeric {
+        text-align: right;
+        font-family: 'Courier New', Courier, monospace;
+        font-weight: bold;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1><i class="fa-solid fa-chart-pie"></i> Dashboard</h1>
+
+<div class="date-filter">
+    <form method="POST" style="display: contents;">
+        <label for="fecha_desde">Desde:</label>
+        <input type="date" id="fecha_desde" name="fecha_desde" value="{{ filtros_aplicados.fecha_desde }}" min="2024-01-01">
+        
+        <label for="fecha_hasta">Hasta:</label>
+        <input type="date" id="fecha_hasta" name="fecha_hasta" value="{{ filtros_aplicados.fecha_hasta }}">
+        
+        <button type="submit"><i class="fa-solid fa-filter"></i> Filtrar</button>
+    </form>
+</div>
+
+<div class="dashboard-container">
+    <div class="panel panel-ventas">
+        <h2><i class="fa-solid fa-seedling"></i>Ventas</h2>
+        {% if ventas_data or total_liquidado_toneladas > 0 %}
+            <p><strong>Total Tns. Liquidadas:</strong> <span class="numeric">{{ format_number(total_liquidado_toneladas, decimals=2) }}</span></p>
+            <table class="summary-table">
+                <thead>
+                    <tr>
+                        <th>Grano</th>
+                        <th class="numeric">Tns. Entregadas</th>
+                        <th class="numeric">Camiones Pend.</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in ventas_data %}
+                    <tr>
+                        <td>{{ item.grano }}</td>
+                        <td class="numeric">{{ format_number(item.toneladas_entregadas, decimals=2) }}</td>
+                        <td class="numeric">{{ item.camiones_pendientes }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p>No hay datos de ventas para el período seleccionado.</p>
+        {% endif %}
+    </div>
+    <div class="panel panel-fletes">
+        <h2><i class="fa-solid fa-truck-fast"></i>Fletes</h2>
+        {% if fletes_data %}
+            <table class="summary-table">
+                <tbody>
+                    <tr>
+                        <td>Toneladas Transportadas</td>
+                        <td class="numeric">{{ format_number(fletes_data.toneladas_transportadas, decimals=2) }}</td>
+                    </tr>
+                    <tr>
+                        <td>Monto Facturado</td>
+                        <td class="numeric">{{ format_number(fletes_data.monto_facturado, is_currency=True) }}</td>
+                    </tr>
+                    <tr>
+                        <td>Cantidad de Viajes</td>
+                        <td class="numeric">{{ fletes_data.cantidad_viajes }}</td>
+                    </tr>
+                    <tr>
+                        <td>Kilómetros Recorridos</td>
+                        <td class="numeric">{{ format_number(fletes_data.kilometros_recorridos) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        {% else %}
+            <p>No hay datos de fletes para el período seleccionado.</p>
+        {% endif %}
+    </div>
+    <div class="panel panel-cobranzas">
+        <h2><i class="fa-solid fa-hand-holding-dollar"></i>Cobranzas</h2>
+        <p>Próximamente...</p>
+    </div>
+    <div class="panel panel-kpis">
+        <h2><i class="fa-solid fa-chart-line"></i>KPIs</h2>
+        <p>Próximamente...</p>
+    </div>
+</div>
+{% endblock %}

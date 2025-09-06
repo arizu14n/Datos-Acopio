@@ -1,71 +1,144 @@
 {% extends "base.html" %}
-{% block title %}Página Principal - Acopio{% endblock %}
+{% block title %}Bienvenido - Sistema Acopio{% endblock %}
 
 {% block head_extra %}
 <style>
-    .home-container {
+    /* Override base body background for this page only */
+    body {
+        background: #f4f7f6;
+    }
+
+    .hero {
+        display: flex;
+        align-items: center;
+        justify-content: center;
         text-align: center;
-        position: relative;
-        padding-top: 50px;
+        padding: 80px 20px;
+        background: linear-gradient(135deg, rgba(46, 125, 50, 0.85), rgba(27, 94, 32, 0.95)), url("{{ url_for('static', filename='assets/Trigo.png') }}");
+        background-size: cover;
+        background-position: center;
+        color: white;
+        min-height: 50vh;
+        border-radius: 0 0 30px 30px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
-    .cycle-image {
-        width: 150px;
-        height: 150px;
-        object-fit: contain;
-        margin: 20px;
+    .hero-content {
+        max-width: 800px;
     }
-    .arrow {
-        position: absolute;
-        width: 80px; /* Adjust size as needed */
-        height: 80px;
-        object-fit: contain;
+    .hero h1 {
+        font-size: 3.5rem;
+        font-weight: bold;
+        margin-bottom: 1rem;
+        text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
     }
-    #arrow1 {
-        top: 120px;
-        left: 40%;
-        transform: rotate(120deg);
+    .hero p {
+        font-size: 1.25rem;
+        margin-bottom: 2rem;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.3);
     }
-    #arrow2 {
-        top: 250px;
-        left: 55%;
-        transform: rotate(-10deg);
+    .hero .cta-button {
+        display: inline-block;
+        padding: 15px 35px;
+        font-size: 1.1rem;
+        font-weight: bold;
+        color: #2e7d32;
+        background-color: white;
+        border-radius: 50px;
+        text-decoration: none;
+        transition: transform 0.2s, box-shadow 0.2s;
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2);
     }
-    #arrow3 {
-        top: 120px;
-        right: 40%;
-        transform: rotate(240deg);
+    .hero .cta-button:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 15px rgba(0,0,0,0.3);
+    }
+
+    .features-section {
+        padding: 60px 20px;
+        text-align: center;
+    }
+    .features-section h2 {
+        font-size: 2.5rem;
+        margin-bottom: 40px;
+        color: #333;
+    }
+    .features-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 30px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    .feature-card {
+        background-color: white;
+        border-radius: 15px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.08);
+        text-align: center;
+        padding: 30px;
+        transition: transform 0.3s, box-shadow 0.3s;
+    }
+    .feature-card:hover {
+        transform: translateY(-10px);
+        box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+    }
+    .feature-card .feature-icon { /* NEW STYLE */
+        font-size: 4rem;
+        margin-bottom: 25px;
+        color: #2e7d32;
+        display: block;
+    }
+    .feature-card h3 {
+        font-size: 1.5rem;
+        margin-bottom: 15px;
+        color: #2e7d32;
+    }
+    .feature-card p {
+        font-size: 1rem;
+        color: #666;
+        line-height: 1.6;
     }
 
     @media (max-width: 768px) {
-        .home-container {
-            padding-top: 20px;
+        .hero h1 {
+            font-size: 2.5rem;
         }
-        .cycle-image {
-            display: block;
-            margin: 10px auto;
-            width: 100px; /* Smaller images for mobile */
-            height: 100px;
+        .hero p {
+            font-size: 1.1rem;
         }
-        .arrow {
-            display: none; /* Hide arrows on small screens */
+        .features-section h2 {
+            font-size: 2rem;
         }
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="home-container">
-    <h1>Acopio de Cereales</h1>
-    <div>
-       
-        <img src="{{ url_for('static', filename='assets/Maiz.png') }}" alt="Maíz" class="cycle-image">
-         <img src="{{ url_for('static', filename='assets/Trigo.png') }}" alt="Trigo" class="cycle-image">
-        <img src="{{ url_for('static', filename='assets/Soja.png') }}" alt="Soja" class="cycle-image">
-        
-        <img src="{{ url_for('static', filename='assets/Flecha.png') }}" class="arrow" id="arrow1">
-        <img src="{{ url_for('static', filename='assets/Flecha.png') }}" class="arrow" id="arrow2">
-        <img src="{{ url_for('static', filename='assets/Flecha.png') }}" class="arrow" id="arrow3">
+<section class="hero">
+    <div class="hero-content">
+        <h1>Sistema de Gestión de Acopio</h1>
+        <p>Centralice la información de sus operaciones de acopio, fletes y ventas de manera eficiente y visual.</p>
+        <a href="{{ url_for('dashboard') }}" class="cta-button"><i class="fa-solid fa-chart-pie"></i> Ir al Dashboard</a>
     </div>
-    <p>Bienvenido al sistema de gestión de acopio.</p>
-</div>
+</section>
+
+<section class="features-section">
+    <h2>Módulos Principales</h2>
+    <div class="features-grid">
+        <div class="feature-card">
+            <i class="fa-solid fa-file-signature feature-icon"></i>
+            <h3>Ventas y Contratos</h3>
+            <p>Consulte el estado de los contratos, entregas, liquidaciones y saldos pendientes de un vistazo.</p>
+        </div>
+        <div class="feature-card">
+            <i class="fa-solid fa-truck-fast feature-icon"></i>
+            <h3>Gestión de Fletes</h3>
+            <p>Importe y administre los fletes, controle los kilómetros recorridos y los importes facturados.</p>
+        </div>
+        <div class="feature-card">
+            <i class="fa-solid fa-magnifying-glass-chart feature-icon"></i>
+            <h3>Consultas Dinámicas</h3>
+            <p>Realice búsquedas avanzadas de entregas y consulte información externa como el padrón de SISA.</p>
+        </div>
+    </div>
+</section>
 {% endblock %}

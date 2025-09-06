@@ -181,6 +181,91 @@ class PDF(FPDF):
 def home():
     return render_template('home.html')
 
+
+@app.route('/dashboard', methods=['GET', 'POST'])
+def dashboard():
+    try:
+        filtros_aplicados = {}
+        if request.method == 'POST':
+            filtros_aplicados['fecha_desde'] = request.form.get('fecha_desde')
+            filtros_aplicados['fecha_hasta'] = request.form.get('fecha_hasta')
+        else:
+            today = datetime.date.today()
+            first_day_of_month = today.replace(day=1)
+            filtros_aplicados['fecha_desde'] = first_day_of_month.strftime('%Y-%m-%d')
+            filtros_aplicados['fecha_hasta'] = today.strftime('%Y-%m-%d')
+
+        fecha_desde_dt = datetime.datetime.strptime(filtros_aplicados['fecha_desde'], '%Y-%m-%d').date()
+        fecha_hasta_dt = datetime.datetime.strptime(filtros_aplicados['fecha_hasta'], '%Y-%m-%d').date()
+
+        # --- Lógica para Panel de Fletes ---
+        fletes_data = None
+        db = get_db()
+        with db:
+            cursor = db.cursor()
+            query = "SELECT SUM(o_neto) as total_neto, SUM(importe) as total_importe, COUNT(*) as total_viajes, SUM(g_kilomet) as total_km FROM fletes WHERE g_fecha >= ? AND g_fecha <= ?"
+            cursor.execute(query, (filtros_aplicados['fecha_desde'], filtros_aplicados['fecha_hasta']))
+            fletes_result = cursor.fetchone()
+            if fletes_result:
+                fletes_data = {
+                    'toneladas_transportadas': (fletes_result['total_neto'] or 0) / 1000,
+                    'monto_facturado': fletes_result['total_importe'] or 0,
+                    'cantidad_viajes': fletes_result['total_viajes'] or 0,
+                    'kilometros_recorridos': fletes_result['total_km'] or 0
+                }
+
+        # --- Lógica para Panel de Ventas ---
+        ventas_por_grano = {}
+        total_liquidado_kilos = 0
+
+        # Toneladas Entregadas (acocarpo.dbf)
+        with DBF(RUTA_ACOCARPO_DBF, encoding='iso-8859-1') as tabla_acocarpo:
+            for rec in tabla_acocarpo:
+                fecha_entrega = rec.get('G_FECHA')
+                if isinstance(fecha_entrega, datetime.date) and fecha_desde_dt <= fecha_entrega <= fecha_hasta_dt:
+                    grano_code = rec.get('G_CODI')
+                    if not grano_code: continue
+                    grano_desc = get_grano_description(grano_code)
+                    kilos = rec.get('G_SALDO', 0) or 0
+                    if grano_desc not in ventas_por_grano:
+                        ventas_por_grano[grano_desc] = {'toneladas_entregadas': 0, 'camiones_pendientes': 0}
+                    ventas_por_grano[grano_desc]['toneladas_entregadas'] += kilos
+
+        # Toneladas Liquidadas (liqven.dbf) - Total en el período
+        with DBF(RUTA_LIQVEN_DBF, encoding='iso-8859-1') as tabla_liqven:
+            for rec in tabla_liqven:
+                fecha_liq = rec.get('FEC_C')
+                if isinstance(fecha_liq, datetime.date) and fecha_desde_dt <= fecha_liq <= fecha_hasta_dt:
+                    total_liquidado_kilos += rec.get('PESO', 0) or 0
+        
+        total_liquidado_toneladas = total_liquidado_kilos / 1000
+
+        # Camiones Pendientes (contrat.dbf) - Lógica actual, no depende del rango de fechas.
+        _, totales_por_grano_cosecha = get_contratos_pendientes()
+        for (grano, _), data in totales_por_grano_cosecha.items():
+            if grano not in ventas_por_grano:
+                ventas_por_grano[grano] = {'toneladas_entregadas': 0, 'camiones_pendientes': 0}
+            ventas_por_grano[grano]['camiones_pendientes'] += data['camiones']
+
+        # Combinar datos para la tabla
+        ventas_data = []
+        for grano, data in sorted(ventas_por_grano.items()):
+            ventas_data.append({
+                'grano': grano,
+                'toneladas_entregadas': data['toneladas_entregadas'] / 1000,
+                'camiones_pendientes': data['camiones_pendientes']
+            })
+
+        return render_template('dashboard.html',
+                               filtros_aplicados=filtros_aplicados,
+                               fletes_data=fletes_data,
+                               ventas_data=ventas_data,
+                               total_liquidado_toneladas=total_liquidado_toneladas)
+    except Exception as e:
+        # For debugging purposes, returning the error to the page can be helpful
+        import traceback
+        return f"<h1>Ocurrió un error en el Dashboard: {e}</h1><pre>{traceback.format_exc()}</pre>"
+
 def get_stock_granos_por_cosecha():
     stock_granos = {}
     try:

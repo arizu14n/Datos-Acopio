@@ -14,7 +14,7 @@ timeout /t 5 /nobreak > nul
 
 REM Abre la página en el navegador
 echo "Abriendo la pagina web..."
-start http://127.0.0.1:5000/ventas
+start http://127.0.0.1:5000/
 
 echo "El servidor se esta ejecutando en segundo plano."
 echo "Cierre esta ventana para detener el servidor."
