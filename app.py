@@ -240,7 +240,7 @@ def get_contratos_pendientes():
 
                 if kiloped > entrega:
                     cosecha = rec.get('COSECHA_C', 'N/A')
-                    if cosecha and cosecha < '22/23':
+                    if cosecha and cosecha <= '23/24':
                         continue
 
                     diferencia = kiloped - entrega
@@ -298,11 +298,12 @@ def ventas():
 
         # Prepare data for pie chart (pending shipments by grain)
         totales_por_grano = {}
-        for (grano, cosecha), data in totales_por_grano_cosecha.items():
-            if grano not in totales_por_grano:
-                totales_por_grano[grano] = {'kilos': 0, 'camiones': 0}
-            totales_por_grano[grano]['kilos'] += data['kilos']
-            totales_por_grano[grano]['camiones'] += data['camiones']
+        if totales_por_grano_cosecha:
+            for (grano, cosecha), data in totales_por_grano_cosecha.items():
+                if grano not in totales_por_grano:
+                    totales_por_grano[grano] = {'kilos': 0, 'camiones': 0}
+                totales_por_grano[grano]['kilos'] += data['kilos']
+                totales_por_grano[grano]['camiones'] += data['camiones']
             
         pie_chart_labels = list(totales_por_grano.keys())
         pie_chart_values = [totales_por_grano[key]['kilos'] for key in pie_chart_labels]

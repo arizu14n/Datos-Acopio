@@ -247,7 +247,7 @@
             // Pie Chart
             var pieCtx = document.getElementById('pieChartPendientes').getContext('2d');
             var pieChart = new Chart(pieCtx, {
-                type: 'pie',
+                type: 'bar',
                 data: {
                     labels: {{ pie_chart_labels | tojson }},
                     datasets: [{
