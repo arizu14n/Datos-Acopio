@@ -4,7 +4,7 @@
 {% block head_extra %}
 <style>
     h1, h2 { color: #333; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; background-color: white; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background-color: #f2f2f2; }
     tfoot { font-weight: bold; background-color: #f2f2f2; }
@@ -102,55 +102,57 @@
         </form>
     </div>
 
-    <table>
-        <thead>
-            <tr>
-                <th>Fecha</th>
-                <th>CTG</th>
-                <th>Grano</th>
-                <th>Cosecha</th>
-                <th>Peso Origen</th>
-                <th>Neto</th>
-                <th>Tarifa Flete</th>
-                <th>Importe</th>
-                <th>Kilómetros</th>
-                <th></th>
-                <th>Localidad</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for flete in fletes %}
-                <tr data-id="{{ flete.id }}">
-                    <td>{{ flete.G_FECHA }}</td>
-                    <td>{{ flete.G_CTG }}</td>
-                    <td>{{ flete.grano }}</td>
-                    <td>{{ flete.G_COSE }}</td>
-                    <td>{{ flete.O_PESO }}</td>
-                    <td>{{ flete.O_NETO }}</td>
-                    <td>{{ flete.G_TARFLET }}</td>
-                    <td>{{ flete.importe }}</td>
-                    <td><input type="text" class="km-input" value="{{ flete.G_KILOMETR }}"></td>
-                    <td><button class="btn btn-primary btn-sm save-km">Guardar</button></td>
-                    <td>{{ flete.localidad }}</td>
-                </tr>
-            {% else %}
+    <div class="table-container">
+        <table>
+            <thead>
                 <tr>
-                    <td colspan="11" style="text-align: center;">No hay datos para mostrar.</td>
+                    <th>Fecha</th>
+                    <th>CTG</th>
+                    <th>Grano</th>
+                    <th>Cosecha</th>
+                    <th>Peso Origen</th>
+                    <th>Neto</th>
+                    <th>Tarifa Flete</th>
+                    <th>Importe</th>
+                    <th>Kilómetros</th>
+                    <th></th>
+                    <th>Localidad</th>
                 </tr>
-            {% endfor %}
-        </tbody>
-        <tfoot>
-            <tr>
-                <td colspan="5"><strong>Totales</strong></td>
-                <td id="total-neto"><strong>{{ totales.neto }}</strong></td>
-                <td></td>
-                <td id="total-importe"><strong>{{ totales.importe }}</strong></td>
-                <td id="total-km"><strong>{{ totales.km }}</strong></td>
-                <td></td>
-                <td><strong>Viajes: {{ totales.viajes }}</strong></td>
-            </tr>
-        </tfoot>
-    </table>
+            </thead>
+            <tbody>
+                {% for flete in fletes %}
+                    <tr data-id="{{ flete.id }}">
+                        <td>{{ flete.G_FECHA }}</td>
+                        <td>{{ flete.G_CTG }}</td>
+                        <td>{{ flete.grano }}</td>
+                        <td>{{ flete.G_COSE }}</td>
+                        <td>{{ flete.O_PESO }}</td>
+                        <td>{{ flete.O_NETO }}</td>
+                        <td>{{ flete.G_TARFLET }}</td>
+                        <td>{{ flete.importe }}</td>
+                        <td><input type="text" class="km-input" value="{{ flete.G_KILOMETR }}"></td>
+                        <td><button class="btn btn-primary btn-sm save-km">Guardar</button></td>
+                        <td>{{ flete.localidad }}</td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="11" style="text-align: center;">No hay datos para mostrar.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="5"><strong>Totales</strong></td>
+                    <td id="total-neto"><strong>{{ totales.neto }}</strong></td>
+                    <td></td>
+                    <td id="total-importe"><strong>{{ totales.importe }}</strong></td>
+                    <td id="total-km"><strong>{{ totales.km }}</strong></td>
+                    <td></td>
+                    <td><strong>Viajes: {{ totales.viajes }}</strong></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
 
 {% endblock %}
 

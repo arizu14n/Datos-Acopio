@@ -4,7 +4,7 @@
 {% block head_extra %}
 <style>
     h1, h2 { color: #333; display: inline-block;}
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; margin-bottom: 30px; font-size: 14px; background-color: white;}
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
     th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
     th { background-color: #f2f2f2; }
     tfoot { font-weight: bold; }
@@ -13,7 +13,7 @@
     form { margin-bottom: 20px; }
     select { padding: 8px; width: 220px; }
     .info-label { font-weight: bold; margin-left: 15px; }
-    .summary-table { width: 50%; }
+    .summary-table { width: 100%; }
     .pdf-button { 
         margin-left: 20px; 
         padding: 5px 10px; 
@@ -26,7 +26,10 @@
     .chart-container {
         width: 60%;
         height: 400px; /* Added height */
-        margin-top: 30px;
+        background-color: white;
+        border-radius: 12px;
+        padding: 20px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
     .no-confirmada {
         background-color: #fffacd; /* LemonChiffon, a light yellow */
@@ -39,51 +42,63 @@
         color: red; 
         font-weight: bold; 
     }
+    .layout-container {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 20px;
+    }
+    @media screen and (max-width: 992px) {
+        .layout-container {
+            flex-direction: column;
+        }
+    }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 {% endblock %}
 
 {% block content %}
     <h2>Contratos con Saldo Pendiente de Entrega</h2>
-    <div style="display: flex; flex-wrap: wrap;">
+    <div class="layout-container">
         <div style="flex: 1; min-width: 50%;">
-            <table class="summary-table">
-                <thead>
-                    <tr>
-                        <th>Contrato</th>
-                        <th>Comprador</th>
-                        <th>Grano</th>
-                        <th>Cosecha</th>
-                        <th>Kilos Liquidados</th>
-                        <th>Kilos Liq. Ventas</th>
-                        <th>Kilos Pendientes</th>
-                        <th>Camiones Pendientes</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for contrato in contratos_pendientes %}
-                    <tr>
-                        <td>{{ contrato.contrato }}</td>
-                        <td>{{ contrato.comprador }}</td>
-                        <td>{{ contrato.grano }}</td>
-                        <td>{{ contrato.cosecha }}</td>
-                        <td>{{ contrato.kilos_liquidados }}</td>
-                        <td>{{ format_number(contrato.kilos_liq_ventas) }}</td>
-                        <td>{{ contrato.kilos_pendientes }}</td>
-                        <td>{{ contrato.camiones_pendientes }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-                <tfoot>
-                    {% for grano, totales in totales_por_grano.items() %}
-                    <tr>
-                        <td colspan="6" style="text-align: right;"><strong>Total {{ grano }}:</strong></td>
-                        <td><strong>{{ format_number(totales.kilos) }}</strong></td>
-                        <td><strong>{{ totales.camiones }}</strong></td>
-                    </tr>
-                    {% endfor %}
-                </tfoot>
-            </table>
+            <div class="table-container">
+                <table class="summary-table">
+                    <thead>
+                        <tr>
+                            <th>Contrato</th>
+                            <th>Comprador</th>
+                            <th>Grano</th>
+                            <th>Cosecha</th>
+                            <th>Kilos Liquidados</th>
+                            <th>Kilos Liq. Ventas</th>
+                            <th>Kilos Pendientes</th>
+                            <th>Camiones Pendientes</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for contrato in contratos_pendientes %}
+                        <tr>
+                            <td>{{ contrato.contrato }}</td>
+                            <td>{{ contrato.comprador }}</td>
+                            <td>{{ contrato.grano }}</td>
+                            <td>{{ contrato.cosecha }}</td>
+                            <td>{{ contrato.kilos_liquidados }}</td>
+                            <td>{{ format_number(contrato.kilos_liq_ventas) }}</td>
+                            <td>{{ contrato.kilos_pendientes }}</td>
+                            <td>{{ contrato.camiones_pendientes }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        {% for grano, totales in totales_por_grano.items() %}
+                        <tr>
+                            <td colspan="6" style="text-align: right;"><strong>Total {{ grano }}:</strong></td>
+                            <td><strong>{{ format_number(totales.kilos) }}</strong></td>
+                            <td><strong>{{ totales.camiones }}</strong></td>
+                        </tr>
+                        {% endfor %}
+                    </tfoot>
+                </table>
+            </div>
         </div>
         <div style="flex: 1; min-width: 400px;">
             <div class="chart-container">
@@ -124,28 +139,30 @@
     {% if entregas_confirmadas or entregas_no_confirmadas %}
 
     <h2>Resumen</h2>
-        <table class="summary-table">
-            <tbody>
-                <tr>
-                    <td>Total Saldo Entregas</td>
-                    <td>{{ total_saldo }}</td>
-                </tr>
-                <tr>
-                    <td>Total Peso Liquidaciones</td>
-                    <td>{{ totales_liq['Peso'] }}</td>
-                </tr>
-                <tr class="{% if diferencia_num > 0 %}positivo{% elif diferencia_num < 0 %}negativo{% endif %}">
-                    <td><strong>Diferencia</strong></td>
-                    <td><strong>{{ diferencia }}</strong></td>
-                </tr>
-                {% if diferencia_num < 0 %}
-                <tr class="negativo">
-                    <td><strong>Camiones restantes:</strong></td>
-                    <td><strong>{{ camiones_restantes }}</strong></td>
-                </tr>
-                {% endif %}
-            </tbody>
-        </table>
+        <div class="table-container">
+            <table class="summary-table">
+                <tbody>
+                    <tr>
+                        <td>Total Saldo Entregas</td>
+                        <td>{{ total_saldo }}</td>
+                    </tr>
+                    <tr>
+                        <td>Total Peso Liquidaciones</td>
+                        <td>{{ totales_liq['Peso'] }}</td>
+                    </tr>
+                    <tr class="{% if diferencia_num > 0 %}positivo{% elif diferencia_num < 0 %}negativo{% endif %}">
+                        <td><strong>Diferencia</strong></td>
+                        <td><strong>{{ diferencia }}</strong></td>
+                    </tr>
+                    {% if diferencia_num < 0 %}
+                    <tr class="negativo">
+                        <td><strong>Camiones restantes:</strong></td>
+                        <td><strong>{{ camiones_restantes }}</strong></td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
 
         <div class="chart-container">
             <canvas id="comparacionChart"></canvas>
@@ -155,50 +172,52 @@
             <h2>Entregas</h2>
             <a href="{{ url_for('generar_pdf', tipo_reporte='entregas', contrato=g_contrato_filtro) }}" class="pdf-button">Exportar a PDF</a>
         </div>
-        <table>
-            <thead>
-                <tr>
-                    {% if (entregas_no_confirmadas + entregas_confirmadas) %}
-                        {% for campo in (entregas_no_confirmadas + entregas_confirmadas)[0].keys() %}
-                            <th>{{ campo }}</th>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        {% if (entregas_no_confirmadas + entregas_confirmadas) %}
+                            {% for campo in (entregas_no_confirmadas + entregas_confirmadas)[0].keys() %}
+                                <th>{{ campo }}</th>
+                            {% endfor %}
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for registro in entregas_no_confirmadas %}
+                    <tr class="no-confirmada">
+                        {% for valor in registro.values() %}
+                            <td>{{ valor }}</td>
                         {% endfor %}
-                    {% endif %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for registro in entregas_no_confirmadas %}
-                <tr class="no-confirmada">
-                    {% for valor in registro.values() %}
-                        <td>{{ valor }}</td>
+                    </tr>
                     {% endfor %}
-                </tr>
-                {% endfor %}
-                {% for registro in entregas_confirmadas %}
-                <tr>
-                    {% for valor in registro.values() %}
-                        <td>{{ valor }}</td>
+                    {% for registro in entregas_confirmadas %}
+                    <tr>
+                        {% for valor in registro.values() %}
+                            <td>{{ valor }}</td>
+                        {% endfor %}
+                    </tr>
                     {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-            <tfoot>
-                <tr class="subtotal">
-                    <td colspan="3">Total No Confirmadas</td>
-                    <td>{{ total_no_confirmadas }}</td>
-                    <td>Registros: {{ registros_no_confirmadas }}</td>
-                </tr>
-                <tr class="subtotal">
-                    <td colspan="3">Total Confirmadas</td>
-                    <td>{{ total_confirmadas }}</td>
-                    <td>Registros: {{ registros_confirmadas }}</td>
-                </tr>
-                <tr class="grand-total">
-                    <td colspan="3">Total General</td>
-                    <td>{{ total_saldo }}</td>
-                    <td>Registros: {{ total_registros }}</td>
-                </tr>
-            </tfoot>
-        </table>
+                </tbody>
+                <tfoot>
+                    <tr class="subtotal">
+                        <td colspan="3">Total No Confirmadas</td>
+                        <td>{{ total_no_confirmadas }}</td>
+                        <td>Registros: {{ registros_no_confirmadas }}</td>
+                    </tr>
+                    <tr class="subtotal">
+                        <td colspan="3">Total Confirmadas</td>
+                        <td>{{ total_confirmadas }}</td>
+                        <td>Registros: {{ registros_confirmadas }}</td>
+                    </tr>
+                    <tr class="grand-total">
+                        <td colspan="3">Total General</td>
+                        <td>{{ total_saldo }}</td>
+                        <td>Registros: {{ total_registros }}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
     {% elif g_contrato_filtro %}
         <p>No se encontraron entregas para el contrato seleccionado.</p>
     {% endif %}
@@ -208,37 +227,39 @@
             <h2>Liquidaciones</h2>
             <a href="{{ url_for('generar_pdf', tipo_reporte='liquidaciones', contrato=g_contrato_filtro) }}" class="pdf-button">Exportar a PDF</a>
         </div>
-        <table>
-            <thead>
-                <tr>
-                    {% for campo in liquidaciones_filtradas[0].keys() %}
-                        <th>{{ campo }}</th>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        {% for campo in liquidaciones_filtradas[0].keys() %}
+                            <th>{{ campo }}</th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for liquidacion in liquidaciones_filtradas %}
+                    <tr>
+                        {% for valor in liquidacion.values() %}
+                            <td>{{ valor }}</td>
+                        {% endfor %}
+                    </tr>
                     {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for liquidacion in liquidaciones_filtradas %}
-                <tr>
-                    {% for valor in liquidacion.values() %}
-                        <td>{{ valor }}</td>
-                    {% endfor %}
-                </tr>
-                {% endfor %}
-            </tbody>
-            {% if totales_liq %}
-            <tfoot>
-                <tr>
-                    <td colspan="2">Totales ({{ total_liquidaciones }} registros)</td>
-                    <td>{{ totales_liq['Peso'] }}</td>
-                    <td></td> {# Columna vacía para Precio #}
-                    <td>{{ totales_liq['N.Grav.'] }}</td>
-                    <td>{{ totales_liq['IVA'] }}</td>
-                    <td>{{ totales_liq['Otros'] }}</td>
-                    <td>{{ totales_liq['Total'] }}</td>
-                </tr>
-            </tfoot>
-            {% endif %}
-        </table>
+                </tbody>
+                {% if totales_liq %}
+                <tfoot>
+                    <tr>
+                        <td colspan="2">Totales ({{ total_liquidaciones }} registros)</td>
+                        <td>{{ totales_liq['Peso'] }}</td>
+                        <td></td> {# Columna vacía para Precio #}
+                        <td>{{ totales_liq['N.Grav.'] }}</td>
+                        <td>{{ totales_liq['IVA'] }}</td>
+                        <td>{{ totales_liq['Otros'] }}</td>
+                        <td>{{ totales_liq['Total'] }}</td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
 
     {% endif %}
 
@@ -356,4 +377,3 @@
         });
     </script>
 {% endblock %}
-pro
