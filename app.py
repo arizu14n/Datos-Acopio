@@ -68,8 +68,11 @@ RUTA_CONTRAT_DBF = "C:\\acocta5\\contrat.dbf"
 RUTA_ACOHIS_DBF = "C:\\acocta5\\acohis.dbf"
 RUTA_SYSMAE_DBF = "C:\\acocta5\\sysmae.dbf"
 RUTA_CHOFERES_DBF = "C:\\acocta5\\choferes.dbf"
+RUTA_CCBCTA_DBF = "C:\\acocta5\\ccbcta.dbf"
 
 def format_date(date_obj):
+    if date_obj is None:
+        return ""
     if isinstance(date_obj, datetime.date):
         return date_obj.strftime('%d/%m/%Y')
     return date_obj
@@ -217,6 +220,7 @@ def dashboard():
         # --- Lógica para Panel de Ventas ---
         ventas_por_grano = {}
         total_liquidado_kilos = 0
+        total_liquidado_monto = 0
 
         # Toneladas Entregadas (acocarpo.dbf)
         with DBF(RUTA_ACOCARPO_DBF, encoding='iso-8859-1') as tabla_acocarpo:
@@ -231,12 +235,13 @@ def dashboard():
                         ventas_por_grano[grano_desc] = {'toneladas_entregadas': 0}
                     ventas_por_grano[grano_desc]['toneladas_entregadas'] += kilos
 
-        # Toneladas Liquidadas (liqven.dbf) - Total en el período
+        # Toneladas y Monto Liquidado (liqven.dbf) - Total en el período
         with DBF(RUTA_LIQVEN_DBF, encoding='iso-8859-1') as tabla_liqven:
             for rec in tabla_liqven:
                 fecha_liq = rec.get('FEC_C')
                 if isinstance(fecha_liq, datetime.date) and fecha_desde_dt <= fecha_liq <= fecha_hasta_dt:
                     total_liquidado_kilos += rec.get('PESO', 0) or 0
+                    total_liquidado_monto += rec.get('NET_CTA', 0) or 0
         
         total_liquidado_toneladas = total_liquidado_kilos / 1000
 
@@ -276,12 +281,44 @@ def dashboard():
                         'porcentaje_afectado': porcentaje_afectado
                     })
 
+        # --- Lógica para Panel de Cobranzas ---
+        cobranzas_data = None
+        vencimientos = 0
+        cobrado = 0
+        try:
+            with DBF(RUTA_CCBCTA_DBF, encoding='iso-8859-1') as tabla_ccbcta:
+                for rec in tabla_ccbcta:
+                    fecha_vto = rec.get('VTO_F')
+                    if isinstance(fecha_vto, datetime.date) and fecha_desde_dt <= fecha_vto <= fecha_hasta_dt:
+                        tip_f = rec.get('TIP_F', '').strip().upper()
+                        imp_f = rec.get('IMP_F', 0) or 0
+                        
+                        if tip_f in ('LF', 'LP'):
+                            vencimientos += imp_f
+                        elif tip_f in ('RI', 'SI', 'SG', 'SB'):
+                            cobrado += imp_f
+            
+            cobranzas_data = {
+                'vencimientos': vencimientos,
+                'cobrado': cobrado,
+                'saldo': vencimientos - cobrado
+            }
+        except FileNotFoundError:
+            print(f"Advertencia: No se encontró el archivo DBF: {RUTA_CCBCTA_DBF}")
+            cobranzas_data = {'vencimientos': 0, 'cobrado': 0, 'saldo': 0} # Initialize with zeros if file not found
+        except Exception as e:
+            print(f"Error al leer {RUTA_CCBCTA_DBF}: {e}")
+            cobranzas_data = {'vencimientos': 0, 'cobrado': 0, 'saldo': 0} # Initialize with zeros on error
+
+
         return render_template('dashboard.html',
                                filtros_aplicados=filtros_aplicados,
                                fletes_data=fletes_data,
                                ventas_data=ventas_data,
                                total_liquidado_toneladas=total_liquidado_toneladas,
-                               stock_data=stock_data)
+                               total_liquidado_monto=total_liquidado_monto,
+                               stock_data=stock_data,
+                               cobranzas_data=cobranzas_data)
     except Exception as e:
         # For debugging purposes, returning the error to the page can be helpful
         import traceback
@@ -770,9 +807,74 @@ def consultas():
                            total_kilos_netos=format_number(total_kilos_netos),
                            filtros_aplicados=filtros_aplicados)
 
-@app.route('/cobranzas')
+@app.route('/cobranzas', methods=['GET', 'POST'])
 def cobranzas():
-    return render_template('placeholder.html', title="Cobranzas")
+    filtros_aplicados = {}
+    if request.method == 'POST':
+        filtros_aplicados['fecha_desde'] = request.form.get('fecha_desde')
+        filtros_aplicados['fecha_hasta'] = request.form.get('fecha_hasta')
+    else:
+        today = datetime.date.today()
+        first_day_of_month = today.replace(day=1)
+        filtros_aplicados['fecha_desde'] = first_day_of_month.strftime('%Y-%m-%d')
+        filtros_aplicados['fecha_hasta'] = today.strftime('%Y-%m-%d')
+
+    fecha_desde_dt = datetime.datetime.strptime(filtros_aplicados['fecha_desde'], '%Y-%m-%d').date()
+    fecha_hasta_dt = datetime.datetime.strptime(filtros_aplicados['fecha_hasta'], '%Y-%m-%d').date()
+
+    vencimientos_list = []
+    cobranzas_list = []
+    total_vencimientos = 0
+    total_cobranzas = 0
+
+    try:
+        clientes_map = {}
+        with DBF(RUTA_SYSMAE_DBF, encoding='iso-8859-1') as tabla_sysmae:
+            for rec in tabla_sysmae:
+                if rec.get('CLI_C') and rec.get('S_APELLI'):
+                    clientes_map[rec['CLI_C'].strip()] = rec['S_APELLI'].strip()
+
+        with DBF(RUTA_CCBCTA_DBF, encoding='iso-8859-1') as tabla_ccbcta:
+            for rec in tabla_ccbcta:
+                fecha_vto = rec.get('VTO_F')
+                if isinstance(fecha_vto, datetime.date) and fecha_desde_dt <= fecha_vto <= fecha_hasta_dt:
+                    tip_f = rec.get('TIP_F', '').strip().upper()
+                    imp_f = rec.get('IMP_F', 0) or 0
+                    cliente_code = rec.get('CLI_F', '').strip()
+
+                    if tip_f in ('LF', 'LP'):
+                        item = {
+                            'vencimiento': format_date(fecha_vto),
+                            'cliente': clientes_map.get(cliente_code, cliente_code),
+                            'tipo': tip_f,
+                            'comprobante': f"{rec.get('FA1_F', '')}-{str(rec.get('FAC_F', '')).zfill(8)}",
+                            'importe': imp_f
+                        }
+                        vencimientos_list.append(item)
+                        total_vencimientos += imp_f
+                    elif tip_f in ('RI', 'SI', 'SG', 'SB'):
+                        item = {
+                            'vencimiento': format_date(fecha_vto),
+                            'cliente': clientes_map.get(cliente_code, cliente_code),
+                            'tipo': tip_f,
+                            'comprobante': f"{rec.get('FA1_F', '')}-{str(rec.get('FAC_F', '')).zfill(8)}",
+                            'importe': imp_f
+                        }
+                        cobranzas_list.append(item)
+                        total_cobranzas += imp_f
+
+    except FileNotFoundError as e:
+        print(f"Advertencia: No se encontró el archivo DBF: {e.filename}")
+    except Exception as e:
+        print(f"Error al leer los archivos DBF: {e}")
+
+    return render_template('cobranzas.html', 
+                           filtros_aplicados=filtros_aplicados,
+                           vencimientos=vencimientos_list,
+                           cobranzas=cobranzas_list,
+                           total_vencimientos=total_vencimientos,
+                           total_cobranzas=total_cobranzas,
+                           title="Cobranzas")
 
 def importar_fletes_desde_dbf():
     try:
