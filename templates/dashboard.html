@@ -120,8 +120,7 @@
                 <thead>
                     <tr>
                         <th>Grano</th>
-                        <th class="numeric">Tns. Entregadas</th>
-                        <th class="numeric">Camiones Pend.</th>
+                        <th class="numeric">Entregas</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -129,7 +128,6 @@
                     <tr>
                         <td>{{ item.grano }}</td>
                         <td class="numeric">{{ format_number(item.toneladas_entregadas, decimals=2) }}</td>
-                        <td class="numeric">{{ item.camiones_pendientes }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -170,8 +168,35 @@
         <p>Próximamente...</p>
     </div>
     <div class="panel panel-kpis">
-        <h2><i class="fa-solid fa-chart-line"></i>KPIs</h2>
-        <p>Próximamente...</p>
+        <h2><i class="fa-solid fa-chart-line"></i>Stock y Pendientes</h2>
+        {% if stock_data %}
+            <div style="overflow-x:auto;">
+                <table class="summary-table">
+                    <thead>
+                        <tr>
+                            <th>Grano</th>
+                            <th>Cosecha</th>
+                            <th class="numeric">Pend. (TN)</th>
+                            <th class="numeric">Stock (TN)</th>
+                            <th class="numeric">% Stk</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in stock_data %}
+                        <tr>
+                            <td style="word-wrap: break-word;">{{ item.grano }}</td>
+                            <td style="word-wrap: break-word;">{{ item.cosecha }}</td>
+                            <td class="numeric">{{ format_number(item.pendiente, decimals=2) }}</td>
+                            <td class="numeric">{{ format_number(item.stock, decimals=2) }}</td>
+                            <td class="numeric">{{ "%.2f"|format(item.porcentaje_afectado) }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        {% else %}
+            <p>No hay datos de stock disponibles.</p>
+        {% endif %}
     </div>
 </div>
 {% endblock %}

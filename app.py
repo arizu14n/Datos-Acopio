@@ -228,7 +228,7 @@ def dashboard():
                     grano_desc = get_grano_description(grano_code)
                     kilos = rec.get('G_SALDO', 0) or 0
                     if grano_desc not in ventas_por_grano:
-                        ventas_por_grano[grano_desc] = {'toneladas_entregadas': 0, 'camiones_pendientes': 0}
+                        ventas_por_grano[grano_desc] = {'toneladas_entregadas': 0}
                     ventas_por_grano[grano_desc]['toneladas_entregadas'] += kilos
 
         # Toneladas Liquidadas (liqven.dbf) - Total en el período
@@ -240,27 +240,48 @@ def dashboard():
         
         total_liquidado_toneladas = total_liquidado_kilos / 1000
 
-        # Camiones Pendientes (contrat.dbf) - Lógica actual, no depende del rango de fechas.
-        _, totales_por_grano_cosecha = get_contratos_pendientes()
-        for (grano, _), data in totales_por_grano_cosecha.items():
-            if grano not in ventas_por_grano:
-                ventas_por_grano[grano] = {'toneladas_entregadas': 0, 'camiones_pendientes': 0}
-            ventas_por_grano[grano]['camiones_pendientes'] += data['camiones']
-
         # Combinar datos para la tabla
         ventas_data = []
         for grano, data in sorted(ventas_por_grano.items()):
             ventas_data.append({
                 'grano': grano,
-                'toneladas_entregadas': data['toneladas_entregadas'] / 1000,
-                'camiones_pendientes': data['camiones_pendientes']
+                'toneladas_entregadas': data['toneladas_entregadas'] / 1000
             })
+
+        # --- Lógica para Tabla de Stock y Pendiente ---
+        stock_granos_cosecha = get_stock_granos_por_cosecha()
+        _, totales_por_grano_cosecha_stock = get_contratos_pendientes()
+
+        current_year = datetime.date.today().year
+        min_harvest_year_start = (current_year - 1) % 100
+        min_harvest_year = f"{min_harvest_year_start:02d}/{(min_harvest_year_start + 1):02d}"
+
+        all_keys = set(stock_granos_cosecha.keys()) | set(totales_por_grano_cosecha_stock.keys())
+
+        stock_data = []
+        for grano, cosecha in all_keys:
+            if cosecha >= min_harvest_year:
+                stock = stock_granos_cosecha.get((grano, cosecha), 0)
+                pendiente_data = totales_por_grano_cosecha_stock.get((grano, cosecha), {'kilos': 0})
+                pendiente = pendiente_data['kilos']
+                
+                if stock > 0 or pendiente > 0:
+                    porcentaje_afectado = (pendiente / stock) * 100 if stock > 0 else 100
+
+                    stock_data.append({
+                        'grano': grano,
+                        'cosecha': cosecha,
+                        'stock': stock / 1000,
+                        'pendiente': pendiente / 1000,
+                        'porcentaje_afectado': porcentaje_afectado
+                    })
 
         return render_template('dashboard.html',
                                filtros_aplicados=filtros_aplicados,
                                fletes_data=fletes_data,
                                ventas_data=ventas_data,
-                               total_liquidado_toneladas=total_liquidado_toneladas)
+                               total_liquidado_toneladas=total_liquidado_toneladas,
+                               stock_data=stock_data)
     except Exception as e:
         # For debugging purposes, returning the error to the page can be helpful
         import traceback
@@ -283,7 +304,7 @@ def get_stock_granos_por_cosecha():
         print(f"Error al leer {RUTA_ACOGRAST_DBF}: {e}")
     return stock_granos
 
-def get_contratos_pendientes():
+def get_contratos_pendientes(min_harvest_year=None):
     contratos_pendientes = []
     totales_por_grano_cosecha = {}
 
@@ -325,7 +346,7 @@ def get_contratos_pendientes():
 
                 if kiloped > entrega:
                     cosecha = rec.get('COSECHA_C', 'N/A')
-                    if cosecha and cosecha <= '23/24':
+                    if min_harvest_year and cosecha < min_harvest_year:
                         continue
 
                     diferencia = kiloped - entrega
@@ -373,12 +394,14 @@ def get_contratos_pendientes():
 
 
 
-
 @app.route('/ventas', methods=['GET', 'POST'])
 def ventas():
     try:
         # --- New section for pending contracts ---
-        contratos_pendientes, totales_por_grano_cosecha = get_contratos_pendientes()
+        current_year = datetime.date.today().year
+        min_harvest_year_start = (current_year - 1) % 100
+        min_harvest_year = f"{min_harvest_year_start:02d}/{(min_harvest_year_start + 1):02d}"
+        contratos_pendientes, totales_por_grano_cosecha = get_contratos_pendientes(min_harvest_year=min_harvest_year)
         stock_granos_cosecha = get_stock_granos_por_cosecha()
 
         # Prepare data for pie chart (pending shipments by grain)
@@ -1127,10 +1150,10 @@ def generar_pdf(tipo_reporte):
                 row_data['COE'] = coe_val
                 row_data['Peso'] = format_number(registro.get('PESO', 0))
                 row_data['Precio'] = format_number(registro.get('PREOPE', 0), is_currency=True)
-                row_data['N.Grav.'] = format_number(registro.get('BRU_C', 0), is_currency=True)
-                row_data['IVA'] = format_number(registro.get('IVA_C', 0), is_currency=True)
+                row_data['N.Grav.'] = format_number(rec.get('BRU_C', 0), is_currency=True)
+                row_data['IVA'] = format_number(rec.get('IVA_C', 0), is_currency=True)
                 row_data['Otros'] = format_number(otros_val_num, is_currency=True)
-                row_data['Total'] = format_number(registro.get('NET_CTA', 0), is_currency=True)
+                row_data['Total'] = format_number(rec.get('NET_CTA', 0), is_currency=True)
                 table_data.append(row_data)
             
             totals_dict = {
