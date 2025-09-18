@@ -41,18 +41,12 @@
         cursor: pointer;
         height: fit-content;
     }
-    .btn-primary {
-        background-color: #337ab7;
-    }
-    .btn-warning {
-        background-color: #f0ad4e;
-    }
-    .btn-success {
-        background-color: #5cb85c;
-    }
-    .btn-info {
-        background-color: #5bc0de;
-    }
+    .btn-primary { background-color: #337ab7; }
+    .btn-warning { background-color: #f0ad4e; }
+    .btn-success { background-color: #5cb85c; }
+    .btn-info { background-color: #5bc0de; }
+    .btn-danger { background-color: #d9534f; }
+    .btn-secondary { background-color: #6c757d; }
     .km-input {
         width: 100%;
         border: none;
@@ -60,7 +54,11 @@
         text-align: left;
         padding: 0;
     }
-</style>
+    .modal-header {
+        background-color: #539ee9;
+        border-bottom: 1px solid #dee2e6;
+    }
+    </style>
 {% endblock %}
 
 {% block content %}
@@ -96,7 +94,7 @@
                     <button type="submit" class="btn btn-primary">Filtrar</button>
                     <a href="{{ url_for('fletes') }}" class="btn btn-warning">Reiniciar</a>
                     <a href="{{ url_for('importar_fletes_route') }}" class="btn btn-success">Importar Fletes desde DBF</a>
-                    <a href="{{ url_for('nuevo_flete') }}" class="btn btn-info">Cargar Flete Manual</a>
+                    <button type="button" id="new-flete-btn" class="btn btn-info">Cargar Flete Manual</button>
                 </div>
             </div>
         </form>
@@ -117,6 +115,7 @@
                     <th>Kilómetros</th>
                     <th></th>
                     <th>Localidad</th>
+                    <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -133,10 +132,15 @@
                         <td><input type="text" class="km-input" value="{{ flete.G_KILOMETR }}"></td>
                         <td><button class="btn btn-primary btn-sm save-km">Guardar</button></td>
                         <td>{{ flete.localidad }}</td>
+                        <td>
+                            {% if flete.fuente == 'manual' %}
+                                <button class="btn btn-warning btn-sm edit-flete-btn" data-id="{{ flete.id }}">✏️</button>
+                            {% endif %}
+                        </td>
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="11" style="text-align: center;">No hay datos para mostrar.</td>
+                        <td colspan="12" style="text-align: center;">No hay datos para mostrar.</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -147,11 +151,94 @@
                     <td></td>
                     <td id="total-importe"><strong>{{ totales.importe }}</strong></td>
                     <td id="total-km"><strong>{{ totales.km }}</strong></td>
-                    <td></td>
-                    <td><strong>Viajes: {{ totales.viajes }}</strong></td>
+                    <td></td> <!-- Col 10, empty -->
+                    <td><strong>Viajes: {{ totales.viajes }}</strong></td> <!-- Col 11, Localidad -->
+                    <td></td> <!-- Col 12, Acciones -->
                 </tr>
             </tfoot>
         </table>
+    </div>
+
+    <!-- The Modal -->
+    <div class="modal fade" id="fleteModal" tabindex="-1" aria-labelledby="fleteModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="fleteModalLabel"></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="fleteForm" method="POST">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="g_fecha" class="form-label">Fecha</label>
+                        <input type="date" class="form-control" id="g_fecha" name="g_fecha" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_ctg" class="form-label">CTG</label>
+                        <input type="text" class="form-control" id="g_ctg" name="g_ctg" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_cuilchof" class="form-label">Chofer</label>
+                        <select class="form-select" id="g_cuilchof" name="g_cuilchof" required>
+                            <option selected disabled value="">Seleccionar...</option>
+                            {% for cuil, nombre in all_choferes.items() %}
+                            <option value="{{ cuil }}">{{ nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="g_codi" class="form-label">Grano</label>
+                        <select class="form-select" id="g_codi" name="g_codi" required>
+                            <option selected disabled value="">Seleccionar...</option>
+                            {% for codigo, desc in granos.items() %}
+                            <option value="{{ codigo }}">{{ desc }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_cose" class="form-label">Cosecha</label>
+                        <input type="text" class="form-control" id="g_cose" name="g_cose">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_ctaplade" class="form-label">Localidad</label>
+                        <select class="form-select" id="g_ctaplade" name="g_ctaplade">
+                            <option selected disabled value="">Seleccionar...</option>
+                            {% for codigo, nombre in localidades.items() %}
+                            <option value="{{ codigo }}">{{ nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="o_peso" class="form-label">Kilos Brutos</label>
+                        <input type="number" step="0.01" class="form-control" id="o_peso" name="o_peso" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="o_tara" class="form-label">Kilos Tara</label>
+                        <input type="number" step="0.01" class="form-control" id="o_tara" name="o_tara" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="g_tarflet" class="form-label">Tarifa</label>
+                        <input type="number" step="0.01" class="form-control" id="g_tarflet" name="g_tarflet" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="g_kilomet" class="form-label">Kilómetros</label>
+                        <input type="number" class="form-control" id="g_kilomet" name="g_kilomet" required>
+                    </div>
+                </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="button" id="deleteFleteBtn" class="btn btn-danger" style="display: none;">Eliminar</button>
+            <button type="submit" form="fleteForm" class="btn btn-primary save-btn">Guardar</button>
+          </div>
+        </div>
+      </div>
     </div>
 
 {% endblock %}
@@ -159,8 +246,8 @@
 {% block scripts %}
 <script>
 document.addEventListener('DOMContentLoaded', function() {
+    // --- Script existente para guardar KM ---
     const saveButtons = document.querySelectorAll('.save-km');
-
     saveButtons.forEach(button => {
         button.addEventListener('click', function() {
             const row = this.closest('tr');
@@ -191,9 +278,9 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
 
+    // --- Script existente para total KM ---
     const kmInputs = document.querySelectorAll('.km-input');
     const totalKmCell = document.getElementById('total-km');
-
     const updateAndFormatTotal = () => {
         let total = 0;
         kmInputs.forEach(input => {
@@ -204,33 +291,112 @@ document.addEventListener('DOMContentLoaded', function() {
         });
         totalKmCell.innerHTML = `<strong>${total.toLocaleString('es-AR')}</strong>`;
     };
-
     kmInputs.forEach(input => {
-        input.addEventListener('keydown', (event) => {
-            // Allow: backspace, delete, tab, escape, enter
-            if ([46, 8, 9, 27, 13].indexOf(event.keyCode) !== -1 ||
-                // Allow: Ctrl+A, Command+A
-                (event.keyCode === 65 && (event.ctrlKey === true || event.metaKey === true)) ||
-                // Allow: home, end, left, right, down, up
-                (event.keyCode >= 35 && event.keyCode <= 40)) {
-                // let it happen, don't do anything
-                return;
-            }
-            // Ensure that it is a number and stop the keypress
-            if ((event.shiftKey || (event.keyCode < 48 || event.keyCode > 57)) && (event.keyCode < 96 || event.keyCode > 105)) {
-                event.preventDefault();
-            }
-        });
-
         input.addEventListener('input', () => {
-            // Fallback for paste, etc.
             input.value = input.value.replace(/\D/g, '');
             updateAndFormatTotal();
         });
     });
-
-    // Initial calculation
     updateAndFormatTotal();
+
+    // --- Nuevo script para el modal de edición/creación ---
+    const fleteModalEl = document.getElementById("fleteModal");
+    const fleteModal = new bootstrap.Modal(fleteModalEl);
+    const modalTitle = document.getElementById("fleteModalLabel");
+    const newFleteBtn = document.getElementById("new-flete-btn");
+    const editButtons = document.querySelectorAll(".edit-flete-btn");
+    const fleteForm = document.getElementById("fleteForm");
+    const deleteFleteBtn = document.getElementById("deleteFleteBtn");
+    const saveBtn = fleteModalEl.querySelector(".save-btn");
+
+    // Form validation on submit
+    fleteForm.addEventListener('submit', function(event) {
+        const pesoBruto = parseFloat(document.getElementById('o_peso').value);
+        const pesoTara = parseFloat(document.getElementById('o_tara').value);
+
+        if (isNaN(pesoBruto) || isNaN(pesoTara)) {
+            alert('Por favor, ingrese valores numéricos para Kilos Brutos y Kilos Tara.');
+            event.preventDefault();
+            return;
+        }
+
+        if (pesoBruto <= pesoTara) {
+            alert('Los Kilos Brutos deben ser mayores que los Kilos Tara.');
+            event.preventDefault();
+            return;
+        }
+    });
+
+    // Open modal for new flete
+    newFleteBtn.addEventListener("click", function() {
+        fleteForm.reset();
+        modalTitle.textContent = "Cargar Nuevo Flete";
+        fleteForm.action = "{{ url_for('nuevo_flete') }}";
+        deleteFleteBtn.style.display = "none";
+        saveBtn.textContent = "Guardar Flete";
+        document.getElementById('g_fecha').value = new Date().toISOString().slice(0, 10);
+        fleteModal.show();
+    });
+
+    // Open modal for editing flete
+    editButtons.forEach(button => {
+        button.addEventListener("click", function() {
+            const fleteId = this.dataset.id;
+            
+            fetch(`/fletes/${fleteId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if(data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    
+                    fleteForm.reset();
+                    modalTitle.textContent = "Editar Flete";
+                    deleteFleteBtn.style.display = "inline-block";
+                    saveBtn.textContent = "Guardar Cambios";
+
+                    // Populate form
+                    document.getElementById("g_fecha").value = data.g_fecha.split(' ')[0]; // Handle date format if needed
+                    document.getElementById("g_ctg").value = data.g_ctg;
+                    document.getElementById("g_cuilchof").value = data.g_cuilchof;
+                    document.getElementById("g_codi").value = data.g_codi;
+                    document.getElementById("g_cose").value = data.g_cose;
+                    document.getElementById("g_ctaplade").value = data.g_ctaplade;
+                    document.getElementById("o_peso").value = data.o_peso;
+                    
+                    const tara = data.o_peso - data.o_neto;
+                    document.getElementById("o_tara").value = tara.toFixed(2);
+
+                    document.getElementById("g_tarflet").value = data.g_tarflet;
+                    document.getElementById("g_kilomet").value = data.g_kilomet;
+
+                    // Set form actions
+                    fleteForm.action = `/fletes/edit/${fleteId}`;
+                    
+                    // Store the delete URL in a data attribute
+                    deleteFleteBtn.dataset.deleteUrl = `/fletes/delete/${fleteId}`;
+
+                    fleteModal.show();
+                })
+                .catch(error => {
+                    console.error('Error fetching flete data:', error);
+                    alert('No se pudieron cargar los datos del flete.');
+                });
+        });
+    });
+
+    // Delete button handler
+    deleteFleteBtn.addEventListener("click", function() {
+        const deleteUrl = this.dataset.deleteUrl;
+        if (deleteUrl && confirm("¿Está seguro de que desea eliminar este flete? Esta acción no se puede deshacer.")) {
+            const deleteForm = document.createElement('form');
+            deleteForm.method = 'POST';
+            deleteForm.action = deleteUrl;
+            document.body.appendChild(deleteForm);
+            deleteForm.submit();
+        }
+    });
 });
 </script>
 {% endblock %}
