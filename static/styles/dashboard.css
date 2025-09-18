@@ -1,0 +1,90 @@
+.dashboard-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+    gap: 25px;
+}
+.panel {
+    border: none;
+    border-radius: 12px;
+    padding: 25px;
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    transition: transform 0.2s ease-in-out;
+}
+.panel:hover {
+    transform: translateY(-5px);
+}
+.panel h2 {
+    margin-top: 0;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+}
+.panel h2 i {
+    margin-right: 12px;
+    font-size: 1.8rem;
+}
+.panel-ventas { background: linear-gradient(135deg, #1e88e5, #42a5f5); } /* Blue */
+.panel-fletes { background: linear-gradient(135deg, #43a047, #66bb6a); } /* Green */
+.panel-cobranzas { background: linear-gradient(135deg, #f4511e, #ff7043); } /* Orange */
+.panel-kpis { background: linear-gradient(135deg, #5e35b1, #7e57c2); } /* Purple */
+
+.date-filter {
+    margin-bottom: 25px;
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 12px;
+    background-color: #fff;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+.date-filter label {
+    font-weight: bold;
+}
+.date-filter input[type="date"] {
+    padding: 8px;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+}
+.date-filter button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    background-color: #2e7d32;
+    color: white;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+.date-filter button:hover {
+    background-color: #388e3c;
+}
+
+.summary-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+.summary-table th, .summary-table td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+}
+.summary-table th {
+    font-weight: bold;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    opacity: 0.8;
+}
+.summary-table p {
+    font-size: 1.2rem;
+    font-weight: bold;
+    margin: 10px 0;
+}
+.numeric {
+    text-align: right;
+    font-family: 'Courier New', Courier, monospace;
+    font-weight: bold;
+}
