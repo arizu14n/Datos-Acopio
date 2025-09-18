@@ -1,0 +1,46 @@
+body { 
+    font-family: Arial, sans-serif; 
+    margin: 0;
+    background: linear-gradient(to bottom, #e8f5e9, #c8e6c9);
+    min-height: 100vh;
+    display: flex; /* Added for sticky footer */
+    flex-direction: column; /* Added for sticky footer */
+}
+.navbar {
+    background-color: #2e7d32;
+    overflow: hidden;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.navbar a {
+    float: left;
+    display: block;
+    color: white;
+    text-align: center;
+    padding: 14px 20px;
+    text-decoration: none;
+    font-size: 17px;
+}
+.navbar a:hover {
+    background-color: #388e3c;
+}
+.content {
+    padding: 20px;
+    flex-grow: 1; /* Added for sticky footer */
+}
+.footer {
+    background-color: #333;
+    color: white;
+    text-align: center;
+    padding: 15px;
+    /* Removed position: relative, bottom: 0, width: 100% as flexbox handles it */
+    box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
+    margin-top: 40px;
+}
+.table-container {
+    background-color: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    margin-bottom: 30px;
+    overflow-x: auto; /* Para tablas anchas */
+}

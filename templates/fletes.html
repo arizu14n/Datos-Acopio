@@ -2,65 +2,7 @@
 {% block title %}Fletes - Acopio{% endblock %}
 
 {% block head_extra %}
-<style>
-    h1, h2 { color: #333; }
-    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background-color: #f2f2f2; }
-    tfoot { font-weight: bold; background-color: #f2f2f2; }
-    .form-container form {
-        display: flex;
-        flex-wrap: wrap;
-        align-items: flex-end;
-        gap: 20px;
-        margin-bottom: 20px;
-    }
-    .filter-group {
-        display: flex;
-        flex-direction: column;
-        gap: 5px;
-    }
-    .filter-group-row {
-        display: flex;
-        flex-direction: row;
-        align-items: center;
-        gap: 10px;
-    }
-    .form-control {
-        padding: 8px;
-        border: 1px solid #ccc;
-        border-radius: 4px;
-    }
-    .btn {
-        padding: 8px 12px; 
-        color: white; 
-        text-decoration: none; 
-        border-radius: 4px; 
-        font-size: 14px;
-        border: none;
-        cursor: pointer;
-        height: fit-content;
-    }
-    .btn-primary {
-        background-color: #337ab7;
-    }
-    .btn-warning {
-        background-color: #f0ad4e;
-    }
-    .btn-success {
-        background-color: #5cb85c;
-    }
-    .btn-info {
-        background-color: #5bc0de;
-    }
-    .km-input {
-        width: 100%;
-        border: none;
-        background-color: transparent;
-        text-align: left;
-        padding: 0;
-    }
-</style>
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/fletes.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -96,7 +38,7 @@
                     <button type="submit" class="btn btn-primary">Filtrar</button>
                     <a href="{{ url_for('fletes') }}" class="btn btn-warning">Reiniciar</a>
                     <a href="{{ url_for('importar_fletes_route') }}" class="btn btn-success">Importar Fletes desde DBF</a>
-                    <a href="{{ url_for('nuevo_flete') }}" class="btn btn-info">Cargar Flete Manual</a>
+                    <button type="button" id="new-flete-btn" class="btn btn-info">Cargar Flete Manual</button>
                 </div>
             </div>
         </form>
@@ -117,6 +59,7 @@
                     <th>Kilómetros</th>
                     <th></th>
                     <th>Localidad</th>
+                    <th>Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -133,10 +76,15 @@
                         <td><input type="text" class="km-input" value="{{ flete.G_KILOMETR }}"></td>
                         <td><button class="btn btn-primary btn-sm save-km">Guardar</button></td>
                         <td>{{ flete.localidad }}</td>
+                        <td>
+                            {% if flete.fuente == 'manual' %}
+                                <button class="btn btn-warning btn-sm edit-flete-btn" data-id="{{ flete.id }}">✏️</button>
+                            {% endif %}
+                        </td>
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="11" style="text-align: center;">No hay datos para mostrar.</td>
+                        <td colspan="12" style="text-align: center;">No hay datos para mostrar.</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -147,90 +95,102 @@
                     <td></td>
                     <td id="total-importe"><strong>{{ totales.importe }}</strong></td>
                     <td id="total-km"><strong>{{ totales.km }}</strong></td>
-                    <td></td>
-                    <td><strong>Viajes: {{ totales.viajes }}</strong></td>
+                    <td></td> <!-- Col 10, empty -->
+                    <td><strong>Viajes: {{ totales.viajes }}</strong></td> <!-- Col 11, Localidad -->
+                    <td></td> <!-- Col 12, Acciones -->
                 </tr>
             </tfoot>
         </table>
+    </div>
+
+    <!-- The Modal -->
+    <div class="modal fade" id="fleteModal" tabindex="-1" aria-labelledby="fleteModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="fleteModalLabel"></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="fleteForm" method="POST">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="g_fecha" class="form-label">Fecha</label>
+                        <input type="date" class="form-control" id="g_fecha" name="g_fecha" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_ctg" class="form-label">CTG</label>
+                        <input type="text" class="form-control" id="g_ctg" name="g_ctg" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_cuilchof" class="form-label">Chofer</label>
+                        <select class="form-select" id="g_cuilchof" name="g_cuilchof" required>
+                            <option selected disabled value="">Seleccionar...</option>
+                            {% for cuil, nombre in all_choferes.items() %}
+                            <option value="{{ cuil }}">{{ nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="g_codi" class="form-label">Grano</label>
+                        <select class="form-select" id="g_codi" name="g_codi" required>
+                            <option selected disabled value="">Seleccionar...</option>
+                            {% for codigo, desc in granos.items() %}
+                            <option value="{{ codigo }}">{{ desc }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_cose" class="form-label">Cosecha</label>
+                        <input type="text" class="form-control" id="g_cose" name="g_cose">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_ctaplade" class="form-label">Localidad</label>
+                        <select class="form-select" id="g_ctaplade" name="g_ctaplade">
+                            <option selected disabled value="">Seleccionar...</option>
+                            {% for codigo, nombre in localidades.items() %}
+                            <option value="{{ codigo }}">{{ nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="o_peso" class="form-label">Kilos Brutos</label>
+                        <input type="number" step="0.01" class="form-control" id="o_peso" name="o_peso" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="o_tara" class="form-label">Kilos Tara</label>
+                        <input type="number" step="0.01" class="form-control" id="o_tara" name="o_tara" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="g_tarflet" class="form-label">Tarifa</label>
+                        <input type="number" step="0.01" class="form-control" id="g_tarflet" name="g_tarflet" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="g_kilomet" class="form-label">Kilómetros</label>
+                        <input type="number" class="form-control" id="g_kilomet" name="g_kilomet" required>
+                    </div>
+                </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="button" id="deleteFleteBtn" class="btn btn-danger" style="display: none;">Eliminar</button>
+            <button type="submit" form="fleteForm" class="btn btn-primary save-btn">Guardar</button>
+          </div>
+        </div>
+      </div>
     </div>
 
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    const saveButtons = document.querySelectorAll('.save-km');
-
-    saveButtons.forEach(button => {
-        button.addEventListener('click', function() {
-            const row = this.closest('tr');
-            const id = row.dataset.id;
-            const kmInput = row.querySelector('.km-input');
-            const km = kmInput.value;
-
-            const formData = new FormData();
-            formData.append('id', id);
-            formData.append('km', km);
-
-            fetch("{{ url_for('update_km') }}", {
-                method: 'POST',
-                body: formData
-            })
-            .then(response => response.json())
-            .then(data => {
-                if(data.success) {
-                    alert('Kilómetros actualizados correctamente.');
-                } else {
-                    alert('Error al actualizar los kilómetros: ' + data.error);
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                alert('Ocurrió un error de red.');
-            });
-        });
-    });
-
-    const kmInputs = document.querySelectorAll('.km-input');
-    const totalKmCell = document.getElementById('total-km');
-
-    const updateAndFormatTotal = () => {
-        let total = 0;
-        kmInputs.forEach(input => {
-            const value = parseInt(input.value, 10);
-            if (!isNaN(value)) {
-                total += value;
-            }
-        });
-        totalKmCell.innerHTML = `<strong>${total.toLocaleString('es-AR')}</strong>`;
-    };
-
-    kmInputs.forEach(input => {
-        input.addEventListener('keydown', (event) => {
-            // Allow: backspace, delete, tab, escape, enter
-            if ([46, 8, 9, 27, 13].indexOf(event.keyCode) !== -1 ||
-                // Allow: Ctrl+A, Command+A
-                (event.keyCode === 65 && (event.ctrlKey === true || event.metaKey === true)) ||
-                // Allow: home, end, left, right, down, up
-                (event.keyCode >= 35 && event.keyCode <= 40)) {
-                // let it happen, don't do anything
-                return;
-            }
-            // Ensure that it is a number and stop the keypress
-            if ((event.shiftKey || (event.keyCode < 48 || event.keyCode > 57)) && (event.keyCode < 96 || event.keyCode > 105)) {
-                event.preventDefault();
-            }
-        });
-
-        input.addEventListener('input', () => {
-            // Fallback for paste, etc.
-            input.value = input.value.replace(/\D/g, '');
-            updateAndFormatTotal();
-        });
-    });
-
-    // Initial calculation
-    updateAndFormatTotal();
-});
+    const updateKmUrl = "{{ url_for('update_km') }}";
+    const nuevoFleteUrl = "{{ url_for('nuevo_flete') }}";
 </script>
+<script src="{{ url_for('static', filename='js/fletes.js') }}"></script>
 {% endblock %}
