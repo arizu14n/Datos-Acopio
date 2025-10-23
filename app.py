@@ -687,9 +687,42 @@ def consultas():
     entregas = None
     total_kilos_netos = 0
     filtros_aplicados = {}
+    
+    # --- Lógica para Cuenta Corriente Granaria ---
+    cuenta_corriente_data = None
+    g_contrato_filtro_granaria = None
+
 
     # --- Obtener valores para los filtros ---
     granos, cosechas, compradores = get_filtro_values()
+    
+    # --- Obtener todos los contratos para el dropdown de Cta Cte Granaria de las últimas 3 cosechas ---
+    try:
+        with DBF(RUTA_ACOCARPO_DBF, encoding='iso-8859-1') as tabla_acocarpo:
+            all_records = [rec for rec in tabla_acocarpo if rec.get('G_COSE') and rec.get('G_CONTRATO')]
+            
+            # Obtener las últimas 3 cosechas únicas y ordenarlas
+            cosechas_unicas = sorted(list(set(rec['G_COSE'] for rec in all_records)), reverse=True)
+            ultimas_tres_cosechas = cosechas_unicas[:3]
+            
+            # Filtrar contratos de las últimas tres cosechas y mantener el orden
+            contratos_vistos = set()
+            contratos_granaria = []
+            # Iterar en reversa para obtener los contratos más recientes primero
+            for rec in reversed(all_records):
+                contrato = rec.get('G_CONTRATO').strip()
+                if contrato and rec.get('G_COSE') in ultimas_tres_cosechas:
+                    if contrato not in contratos_vistos:
+                        contratos_granaria.append(contrato)
+                        contratos_vistos.add(contrato)
+
+    except FileNotFoundError:
+        contratos_granaria = []
+        print(f"Advertencia: No se encontró el archivo DBF: {RUTA_ACOCARPO_DBF}")
+    except Exception as e:
+        contratos_granaria = []
+        print(f"Error al leer {RUTA_ACOCARPO_DBF}: {e}")
+
 
     if request.method == 'POST':
         # Determinar qué formulario se envió
@@ -795,6 +828,62 @@ def consultas():
             }
             entregas, total_kilos_netos = get_entregas(filtros)
             filtros_aplicados = filtros
+            
+        elif 'consultar_granaria' in request.form:
+            g_contrato_filtro_granaria = request.form.get('g_contrato_granaria')
+            if g_contrato_filtro_granaria:
+                movimientos = []
+                # Obtener Entregas
+                try:
+                    with DBF(RUTA_ACOCARPO_DBF, encoding='iso-8859-1') as tabla_acocarpo:
+                        for rec in tabla_acocarpo:
+                            if rec['G_CONTRATO'] == g_contrato_filtro_granaria:
+                                if isinstance(rec.get('G_FECHA'), datetime.date):
+                                    movimientos.append({
+                                        'fecha': rec['G_FECHA'],
+                                        'comprobante': rec.get('G_CTG', ''),
+                                        'descripcion': f"Entrega - CTG: {rec.get('G_CTG', '')}",
+                                        'entregas': rec.get('G_SALDO', 0) or 0,
+                                        'liquidaciones': 0
+                                    })
+                except Exception as e:
+                    print(f"Error al leer {RUTA_ACOCARPO_DBF} para Cta Cte Granaria: {e}")
+
+                # Obtener Liquidaciones
+                try:
+                    with DBF(RUTA_LIQVEN_DBF, encoding='iso-8859-1') as tabla_liqven:
+                        for rec in tabla_liqven:
+                            if rec['CONTRATO'] == g_contrato_filtro_granaria:
+                                if isinstance(rec.get('FEC_C'), datetime.date):
+                                    fac_c_padded = str(rec.get('FAC_C', '')).zfill(8)
+                                    coe_val = f"{rec.get('FA1_C', '')}-{fac_c_padded}"
+                                    movimientos.append({
+                                        'fecha': rec['FEC_C'],
+                                        'comprobante': coe_val,
+                                        'descripcion': f"Liquidación - COE: {coe_val}",
+                                        'entregas': 0,
+                                        'liquidaciones': rec.get('PESO', 0) or 0
+                                    })
+                except Exception as e:
+                    print(f"Error al leer {RUTA_LIQVEN_DBF} para Cta Cte Granaria: {e}")
+                
+                # Ordenar movimientos por fecha
+                movimientos.sort(key=lambda x: x['fecha'])
+                
+                # Calcular saldo
+                saldo = 0
+                cuenta_corriente_data = []
+                for mov in movimientos:
+                    saldo += mov['entregas'] - mov['liquidaciones']
+                    cuenta_corriente_data.append({
+                        'fecha': format_date(mov['fecha']),
+                        'comprobante': mov['comprobante'],
+                        'descripcion': mov['descripcion'],
+                        'entregas': format_number(mov['entregas']),
+                        'liquidaciones': format_number(mov['liquidaciones']),
+                        'saldo': format_number(saldo)
+                    })
+
 
     return render_template('consultas.html', 
                            cuit_consultado=cuit_to_display,
@@ -805,7 +894,10 @@ def consultas():
                            compradores=compradores,
                            entregas=entregas,
                            total_kilos_netos=format_number(total_kilos_netos),
-                           filtros_aplicados=filtros_aplicados)
+                           filtros_aplicados=filtros_aplicados,
+                           contratos_granaria=contratos_granaria,
+                           g_contrato_filtro_granaria=g_contrato_filtro_granaria,
+                           cuenta_corriente_data=cuenta_corriente_data)
 
 @app.route('/cobranzas', methods=['GET', 'POST'])
 def cobranzas():

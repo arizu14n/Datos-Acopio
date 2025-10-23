@@ -102,7 +102,7 @@
             <div class="filter-group">
                  <div class="filter-group-row">
                     <input type="submit" value="Consultar" class="btn btn-primary">
-                    <a href="{{ url_for('consultas') }}" class="btn btn-warning">Reiniciar</a>
+                    <a href="#" class="btn btn-warning reiniciar-btn">Reiniciar</a>
                 </div>
             </div>
         </form>
@@ -187,5 +187,76 @@
     {% elif error %}
         <p style="color: red;">{{ error }}</p>
     {% endif %}
+
+    <hr>
+
+    <div class="form-container">
+        <h2>Cuenta Corriente Granaria</h2>
+        <form method="POST">
+            <input type="hidden" name="consultar_granaria" value="1">
+            <div class="filter-group">
+                <label for="g_contrato_granaria">Contrato</label>
+                <select id="g_contrato_granaria" name="g_contrato_granaria" class="form-control">
+                    <option value="">Seleccione un contrato</option>
+                    {% for contrato in contratos_granaria %}
+                        <option value="{{ contrato }}" {% if g_contrato_filtro_granaria == contrato %}selected{% endif %}>{{ contrato }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <div class="filter-group-row">
+                    <input type="submit" value="Consultar" class="btn btn-primary">
+                    <a href="#" class="btn btn-warning reiniciar-btn">Reiniciar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if cuenta_corriente_data %}
+        <h2>Resultado de la Cuenta Corriente Granaria</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Comprobante</th>
+                        <th>Descripción</th>
+                        <th>Entregas</th>
+                        <th>Liquidaciones</th>
+                        <th>Saldo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mov in cuenta_corriente_data %}
+                        <tr>
+                            <td>{{ mov.fecha }}</td>
+                            <td>{{ mov.comprobante }}</td>
+                            <td>{{ mov.descripcion }}</td>
+                            <td>{{ mov.entregas }}</td>
+                            <td>{{ mov.liquidaciones }}</td>
+                            <td>{{ mov.saldo }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const reiniciarBotones = document.querySelectorAll('.reiniciar-btn');
+    reiniciarBotones.forEach(function(boton) {
+        boton.addEventListener('click', function(event) {
+            event.preventDefault(); // Evita que el enlace recargue la página
+            const form = this.closest('form'); // Encuentra el formulario padre del botón
+            if (form) {
+                form.reset(); // Resetea los campos del formulario
+                // Opcional: si quieres que la página se recargue para limpiar los resultados de la tabla
+                // window.location.href = window.location.pathname;
+            }
+        });
+    });
+});
+</script>
 
 {% endblock %}
