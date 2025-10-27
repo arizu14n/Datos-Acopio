@@ -927,33 +927,36 @@ def cobranzas():
                     clientes_map[rec['CLI_C'].strip()] = rec['S_APELLI'].strip()
 
         with DBF(RUTA_CCBCTA_DBF, encoding='iso-8859-1') as tabla_ccbcta:
+            all_records = []
             for rec in tabla_ccbcta:
                 fecha_vto = rec.get('VTO_F')
                 if isinstance(fecha_vto, datetime.date) and fecha_desde_dt <= fecha_vto <= fecha_hasta_dt:
-                    tip_f = rec.get('TIP_F', '').strip().upper()
-                    imp_f = rec.get('IMP_F', 0) or 0
-                    cliente_code = rec.get('CLI_F', '').strip()
+                    all_records.append(rec)
 
-                    if tip_f in ('LF', 'LP'):
-                        item = {
-                            'vencimiento': format_date(fecha_vto),
-                            'cliente': clientes_map.get(cliente_code, cliente_code),
-                            'tipo': tip_f,
-                            'comprobante': f"{rec.get('FA1_F', '')}-{str(rec.get('FAC_F', '')).zfill(8)}",
-                            'importe': imp_f
-                        }
-                        vencimientos_list.append(item)
-                        total_vencimientos += imp_f
-                    elif tip_f in ('RI', 'SI', 'SG', 'SB'):
-                        item = {
-                            'vencimiento': format_date(fecha_vto),
-                            'cliente': clientes_map.get(cliente_code, cliente_code),
-                            'tipo': tip_f,
-                            'comprobante': f"{rec.get('FA1_F', '')}-{str(rec.get('FAC_F', '')).zfill(8)}",
-                            'importe': imp_f
-                        }
-                        cobranzas_list.append(item)
-                        total_cobranzas += imp_f
+            # Sort all records by date and then by comprobante
+            all_records.sort(key=lambda r: (r.get('VTO_F'), f"{r.get('FA1_F', '')}-{str(r.get('FAC_F', '')).zfill(8)}"))
+
+            for rec in all_records:
+                fecha_vto = rec.get('VTO_F')
+                tip_f = rec.get('TIP_F', '').strip().upper()
+                imp_f = rec.get('IMP_F', 0) or 0
+                cliente_code = rec.get('CLI_F', '').strip()
+                comprobante = f"{rec.get('FA1_F', '')}-{str(rec.get('FAC_F', '')).zfill(8)}"
+
+                item = {
+                    'vencimiento': format_date(fecha_vto),
+                    'cliente': clientes_map.get(cliente_code, cliente_code),
+                    'tipo': tip_f,
+                    'comprobante': comprobante,
+                    'importe': imp_f
+                }
+
+                if tip_f in ('LF', 'LP'):
+                    vencimientos_list.append(item)
+                    total_vencimientos += imp_f
+                elif tip_f in ('RI', 'SI', 'SG', 'SB'):
+                    cobranzas_list.append(item)
+                    total_cobranzas += imp_f
 
     except FileNotFoundError as e:
         print(f"Advertencia: No se encontró el archivo DBF: {e.filename}")
@@ -1063,11 +1066,16 @@ def nuevo_flete():
             g_codi = request.form['g_codi']
             g_cose = request.form['g_cose']
             o_peso = float(request.form['o_peso'])
-            o_neto = float(request.form['o_neto'])
+            o_tara = float(request.form['o_tara'])
             g_tarflet = float(request.form['g_tarflet'])
             g_kilomet = int(request.form['g_kilomet'])
             g_ctaplade = request.form['g_ctaplade']
             g_cuilchof = request.form['g_cuilchof']
+
+            if o_peso <= o_tara:
+                return "Error: Los Kilos Brutos deben ser mayores que los Kilos Tara."
+
+            o_neto = o_peso - o_tara
             
             importe = (o_neto / 1000) * g_tarflet
 
@@ -1226,7 +1234,8 @@ def fletes():
                 'G_TARFLET': format_number(tarifa, is_currency=True),
                 'G_KILOMETR': kilometros,
                 'localidad': localidades_map.get(rec['g_ctaplade'], 'N/A'),
-                'importe': format_number(importe, is_currency=True)
+                'importe': format_number(importe, is_currency=True),
+                'fuente': rec['fuente']
             }
             fletes_procesados.append(flete)
 
@@ -1241,12 +1250,27 @@ def fletes():
         if filtros_aplicados.get('chofer'):
             nombre_chofer_seleccionado = choferes_map.get(filtros_aplicados['chofer'])
 
+        # Crear diccionario de localidades unicas ordenado por nombre
+        sorted_localidades = OrderedDict(sorted(localidades_map.items(), key=lambda item: item[1]))
+        unique_localidades = OrderedDict()
+        seen_names = set()
+        for code, name in sorted_localidades.items():
+            if name not in seen_names:
+                unique_localidades[code] = name
+                seen_names.add(name)
+
+        # Ordenar choferes por nombre para el modal
+        sorted_all_choferes = OrderedDict(sorted(choferes_map.items(), key=lambda item: item[1]))
+
         return render_template('fletes.html', 
                                fletes=fletes_procesados, 
                                choferes=sorted(list(choferes_set)),
                                filtros_aplicados=filtros_aplicados,
                                nombre_chofer=nombre_chofer_seleccionado,
-                               totales=totales)
+                               totales=totales,
+                               granos=granos_map,
+                               all_choferes=sorted_all_choferes,
+                               localidades=unique_localidades)
 
     except Exception as e:
         return f"<h1>Ocurrió un error: {e}</h1>"
@@ -1406,5 +1430,62 @@ def debug_acohis_last10():
     except Exception as e:
         return f"<h1>Ocurrió un error al leer el archivo: {e}</h1>"
 
+@app.route('/fletes/<int:flete_id>')
+def get_flete(flete_id):
+    db = get_db()
+    flete = db.execute('SELECT * FROM fletes WHERE id = ?', (flete_id,)).fetchone()
+    if flete is None:
+        return jsonify({'error': 'Flete not found'}), 404
+    
+    # Convert row object to a dictionary
+    flete_dict = dict(flete)
+    return jsonify(flete_dict)
+
+@app.route('/fletes/edit/<int:flete_id>', methods=['POST'])
+def edit_flete(flete_id):
+    try:
+        g_fecha = request.form['g_fecha']
+        g_ctg = request.form['g_ctg']
+        g_codi = request.form['g_codi']
+        g_cose = request.form['g_cose']
+        o_peso = float(request.form['o_peso'])
+        o_tara = float(request.form['o_tara'])
+        g_tarflet = float(request.form['g_tarflet'])
+        g_kilomet = int(request.form['g_kilomet'])
+        g_ctaplade = request.form['g_ctaplade']
+        g_cuilchof = request.form['g_cuilchof']
+
+        if o_peso <= o_tara:
+            return "Error: Los Kilos Brutos deben ser mayores que los Kilos Tara."
+
+        o_neto = o_peso - o_tara
+        
+        importe = (o_neto / 1000) * g_tarflet
+
+        db = get_db()
+        with db:
+            db.execute("""
+                UPDATE fletes 
+                SET g_fecha = ?, g_ctg = ?, g_codi = ?, g_cose = ?, o_peso = ?, o_neto = ?, g_tarflet = ?, g_kilomet = ?, g_ctaplade = ?, g_cuilchof = ?, importe = ?
+                WHERE id = ?
+            """, (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, flete_id))
+        
+        return redirect(url_for('fletes'))
+    except sqlite3.IntegrityError:
+        return "Error: El CTG ya existe."
+    except Exception as e:
+        return f"Error al editar el flete: {e}"
+
+@app.route('/fletes/delete/<int:flete_id>', methods=['POST'])
+def delete_flete(flete_id):
+    try:
+        db = get_db()
+        with db:
+            db.execute("DELETE FROM fletes WHERE id = ?", (flete_id,))
+        return redirect(url_for('fletes'))
+    except Exception as e:
+        return f"Error al eliminar el flete: {e}"
+
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
+
