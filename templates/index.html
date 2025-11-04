@@ -8,8 +8,8 @@
 
 {% block content %}
     <h2>Contratos con Saldo Pendiente de Entrega</h2>
-    <div class="layout-container">
-        <div style="flex: 1; min-width: 50%;">
+    <div class="layout-container" style="display: flex;">
+        <div style="flex: 0 0 65%;">
             <div class="table-container">
                 <table class="summary-table">
                     <thead>
@@ -22,26 +22,35 @@
                             <th>Kilos Liq. Ventas</th>
                             <th>Kilos Pendientes</th>
                             <th>Camiones Pendientes</th>
+                            <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for contrato in contratos_pendientes %}
                         <tr>
                             <td>{{ contrato.contrato }}</td>
-                            <td>{{ contrato.comprador }}</td>
-                            <td>{{ contrato.grano }}</td>
-                            <td>{{ contrato.cosecha }}</td>
+                            <td class="comprador">{{ contrato.comprador }}</td>
+                            <td class="grano">{{ contrato.grano }}</td>
+                            <td class="cosecha">{{ contrato.cosecha }}</td>
                             <td>{{ contrato.kilos_liquidados }}</td>
                             <td>{{ format_number(contrato.kilos_liq_ventas) }}</td>
                             <td>{{ contrato.kilos_pendientes }}</td>
                             <td>{{ contrato.camiones_pendientes }}</td>
+                            <td>
+                                <button class="btn btn-primary btn-sm pedir-cupos-btn" 
+                                        data-comprador="{{ contrato.comprador }}" 
+                                        data-grano="{{ contrato.grano }}" 
+                                        data-cosecha="{{ contrato.cosecha }}">
+                                    Pedir Cupos
+                                </button>
+                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                     <tfoot>
                         {% for grano, totales in totales_por_grano.items() %}
                         <tr>
-                            <td colspan="6" style="text-align: right;"><strong>Total {{ grano }}:</strong></td>
+                            <td colspan="7" style="text-align: right;"><strong>Total {{ grano }}:</strong></td>
                             <td><strong>{{ format_number(totales.kilos) }}</strong></td>
                             <td><strong>{{ totales.camiones }}</strong></td>
                         </tr>
@@ -50,7 +59,8 @@
                 </table>
             </div>
         </div>
-        <div style="flex: 1; min-width: 400px;">
+
+        <div style="flex: 0 0 35%;">
             <div class="chart-container">
                 <canvas id="pieChartPendientes"></canvas>
             </div>
@@ -61,7 +71,108 @@
         <canvas id="barChartStock"></canvas>
     </div>
 
+<!-- Modal para Pedir Cupos -->
+<div class="modal fade" id="pedirCuposModal" tabindex="-1" aria-labelledby="pedirCuposModalLabel" aria-hidden="true">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="pedirCuposModalLabel">Pedir Cupos</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="pedirCuposForm">
+          <div class="mb-3">
+            <label for="nombrePersona" class="form-label">Nombre de la Persona</label>
+            <input type="text" class="form-control" id="nombrePersona" required>
+          </div>
+          <div class="mb-3">
+            <label for="cantidadCupos" class="form-label">Cantidad</label>
+            <input type="number" class="form-control" id="cantidadCupos" required>
+          </div>
+          <div class="mb-3">
+            <label for="fechaCupo" class="form-label">Fecha</label>
+            <input type="date" class="form-control" id="fechaCupo" required>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+        <button type="button" class="btn btn-primary" id="aceptarCuposBtn">Aceptar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
     <hr style="margin: 40px 0;">
+
+    <h2>Cupos Solicitados</h2>
+    <div class="table-container">
+        <table class="summary-table" id="cupos-solicitados-table">
+            <thead>
+                <tr>
+                    <th>Contrato</th>
+                    <th>Grano</th>
+                    <th>Cantidad</th>
+                    <th>Fecha Solicitud</th>
+                    <th>Codigo Cupo</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for cupo in cupos_solicitados %}
+                <tr data-cupo-id="{{ cupo.id }}">
+                    <td>{{ cupo.contrato }}</td>
+                    <td>{{ cupo.grano }}</td>
+                    <td>{{ format_number(cupo.cantidad) }}</td>
+                    <td>{{ cupo.fecha_solicitud }}</td>
+                    <td><input type="text" class="form-control form-control-sm codigo-cupo-input" value="{{ cupo.codigo_cupo or '' }}"></td>
+                    <td>
+                        <button class="btn btn-info btn-sm asignar-viaje-btn">Asignar Viaje</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                {% for grano, total in totales_cupos_por_grano.items() %}
+                <tr>
+                    <td colspan="2" style="text-align: right;"><strong>Total {{ grano }}:</strong></td>
+                    <td><strong>{{ format_number(total) }}</strong></td>
+                    <td colspan="3"></td>
+                </tr>
+                {% endfor %}
+            </tfoot>
+        </table>
+    </div>
+
+    <!-- Modal para Asignar Viaje -->
+    <div class="modal fade" id="asignarViajeModal" tabindex="-1" aria-labelledby="asignarViajeModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="asignarViajeModalLabel">Asignar Viaje a Cupo</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="asignarViajeForm">
+                <input type="hidden" id="cupoIdInput" name="cupo_id">
+                <div class="mb-3">
+                    <label for="fleteSelect" class="form-label">Seleccionar Viaje</label>
+                    <select class="form-select" id="fleteSelect" name="flete_id" required>
+                        <option value="">Seleccione un flete</option>
+                        {% for flete in fletes %}
+                            <option value="{{ flete.id }}">{{ flete.g_fecha }} - {{ flete.g_ctg }} - {{ flete.o_neto }} kg</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="button" class="btn btn-primary" id="confirmarAsignacionBtn">Asignar</button>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <h1>Consulta de Contratos</h1>
 

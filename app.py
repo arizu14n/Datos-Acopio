@@ -52,6 +52,20 @@ def init_db():
                 fuente TEXT NOT NULL
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS cupos_solicitados (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contrato TEXT NOT NULL,
+                grano TEXT NOT NULL,
+                cosecha TEXT NOT NULL,
+                cantidad REAL NOT NULL,
+                fecha_solicitud TEXT NOT NULL,
+                nombre_persona TEXT NOT NULL,
+                codigo_cupo TEXT,
+                flete_id INTEGER,
+                FOREIGN KEY (flete_id) REFERENCES fletes (id)
+            )
+        """)
     print("Base de datos inicializada.")
 
 @app.cli.command('init-db')
@@ -458,6 +472,24 @@ def ventas():
         bar_chart_pendientes = [data['kilos'] for data in totales_por_grano_cosecha.values()]
         bar_chart_stock = [stock_granos_cosecha.get((grano, cosecha), 0) for (grano, cosecha) in totales_por_grano_cosecha.keys()]
         
+        # --- Cupos Solicitados ---
+        db = get_db()
+        with db:
+            cursor = db.cursor()
+            cursor.execute("SELECT * FROM cupos_solicitados WHERE flete_id IS NULL ORDER BY fecha_solicitud DESC")
+            cupos_solicitados = cursor.fetchall()
+
+            cursor.execute("SELECT * FROM fletes ORDER BY g_fecha DESC")
+            fletes = cursor.fetchall()
+
+        totales_cupos_por_grano = {}
+        for cupo in cupos_solicitados:
+            grano = cupo['grano']
+            cantidad = cupo['cantidad']
+            if grano not in totales_cupos_por_grano:
+                totales_cupos_por_grano[grano] = 0
+            totales_cupos_por_grano[grano] += cantidad
+
         # --- Existing logic for contract selection ---
         latest_dates = {}
         with DBF(RUTA_ACOCARPO_DBF, encoding='iso-8859-1') as tabla_acocarpo:
@@ -566,6 +598,9 @@ def ventas():
                                bar_chart_labels=bar_chart_labels,
                                bar_chart_pendientes=bar_chart_pendientes,
                                bar_chart_stock=bar_chart_stock,
+                               cupos_solicitados=cupos_solicitados,
+                               fletes=fletes,
+                               totales_cupos_por_grano=totales_cupos_por_grano,
                                contratos=contratos_ordenados,
                                entregas_confirmadas=entregas_confirmadas,
                                entregas_no_confirmadas=entregas_no_confirmadas,
@@ -590,6 +625,49 @@ def ventas():
         return f"<h1>Error: No se encontró el archivo DBF: {e.filename}</h1>"
     except Exception as e:
         return f"<h1>Ocurrió un error al leer el archivo: {e}</h1>"
+
+@app.route('/cupos/solicitar', methods=['POST'])
+def solicitar_cupo():
+    try:
+        data = request.json
+        db = get_db()
+        with db:
+            db.execute("""
+                INSERT INTO cupos_solicitados (contrato, grano, cosecha, cantidad, fecha_solicitud, nombre_persona)
+                VALUES (?, ?, ?, ?, ?, ?)
+            """, (
+                data['contrato'],
+                data['grano'],
+                data['cosecha'],
+                data['cantidad'],
+                data['fecha_solicitud'],
+                data['nombre_persona']
+            ))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/cupos/assign_trip', methods=['POST'])
+def assign_trip():
+    try:
+        data = request.json
+        db = get_db()
+        with db:
+            db.execute("UPDATE cupos_solicitados SET flete_id = ? WHERE id = ?", (data['flete_id'], data['cupo_id']))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/cupos/update_codigo', methods=['POST'])
+def update_codigo():
+    try:
+        data = request.json
+        db = get_db()
+        with db:
+            db.execute("UPDATE cupos_solicitados SET codigo_cupo = ? WHERE id = ?", (data['codigo_cupo'], data['cupo_id']))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 def get_filtro_values():
     granos = {}
@@ -1488,4 +1566,3 @@ def delete_flete(flete_id):
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', debug=True)
-
