@@ -669,6 +669,16 @@ def update_codigo():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+@app.route('/cupos/delete/<int:cupo_id>', methods=['POST'])
+def delete_cupo(cupo_id):
+    try:
+        db = get_db()
+        with db:
+            db.execute("DELETE FROM cupos_solicitados WHERE id = ?", (cupo_id,))
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 def get_filtro_values():
     granos = {}
     cosechas = set()

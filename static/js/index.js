@@ -255,4 +255,36 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         }, true); // Use event capturing to handle blur events
     }
+
+    // Lógica para eliminar un cupo solicitado
+    if(cuposSolicitadosTableBody) {
+        cuposSolicitadosTableBody.addEventListener('click', function(event) {
+            const target = event.target;
+            if (target.classList.contains('delete-cupo-btn')) {
+                const row = target.closest('tr');
+                const cupoId = row.dataset.cupoId;
+
+                if (confirm('¿Está seguro de que desea eliminar este pedido de cupo?')) {
+                    fetch(`/cupos/delete/${cupoId}`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        }
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            row.remove();
+                        } else {
+                            alert('Error al eliminar el cupo: ' + data.error);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Ocurrió un error de red.');
+                    });
+                }
+            }
+        });
+    }
 });
