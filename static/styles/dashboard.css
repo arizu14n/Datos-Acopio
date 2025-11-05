@@ -14,6 +14,13 @@
 .panel:hover {
     transform: translateY(-5px);
 }
+
+.panel.clickable:hover {
+    cursor: pointer;
+    box-shadow: 0 8px 20px rgba(0,0,0,0.25);
+    transform: translateY(-8px);
+}
+
 .panel h2 {
     margin-top: 0;
     font-size: 1.5rem;
@@ -87,4 +94,9 @@
     text-align: right;
     font-family: 'Courier New', Courier, monospace;
     font-weight: bold;
+}
+
+.panel-link {
+    text-decoration: none;
+    color: inherit;
 }

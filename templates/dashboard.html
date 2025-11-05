@@ -21,81 +21,87 @@
 </div>
 
 <div class="dashboard-container">
-    <div class="panel panel-ventas">
-        <h2><i class="fa-solid fa-seedling"></i>Ventas</h2>
-        {% if ventas_data or total_liquidado_toneladas > 0 %}
-            <p><strong>Total Tns. Liquidadas:</strong> <span class="numeric">{{ format_number(total_liquidado_toneladas, decimals=2) }}</span></p>
-            <p><strong>Monto Total Liquidado:</strong> <span class="numeric">{{ format_number(total_liquidado_monto, is_currency=True) }}</span></p>
-            <table class="summary-table">
-                <thead>
-                    <tr>
-                        <th>Grano</th>
-                        <th class="numeric">Entregas</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in ventas_data %}
-                    <tr>
-                        <td>{{ item.grano }}</td>
-                        <td class="numeric">{{ format_number(item.toneladas_entregadas, decimals=2) }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        {% else %}
-            <p>No hay datos de ventas para el período seleccionado.</p>
-        {% endif %}
-    </div>
-    <div class="panel panel-fletes">
-        <h2><i class="fa-solid fa-truck-fast"></i>Fletes</h2>
-        {% if fletes_data %}
-            <table class="summary-table">
-                <tbody>
-                    <tr>
-                        <td>Toneladas Transportadas</td>
-                        <td class="numeric">{{ format_number(fletes_data.toneladas_transportadas, decimals=2) }}</td>
-                    </tr>
-                    <tr>
-                        <td>Monto Facturado</td>
-                        <td class="numeric">{{ format_number(fletes_data.monto_facturado, is_currency=True) }}</td>
-                    </tr>
-                    <tr>
-                        <td>Cantidad de Viajes</td>
-                        <td class="numeric">{{ fletes_data.cantidad_viajes }}</td>
-                    </tr>
-                    <tr>
-                        <td>Kilómetros Recorridos</td>
-                        <td class="numeric">{{ format_number(fletes_data.kilometros_recorridos) }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        {% else %}
-            <p>No hay datos de fletes para el período seleccionado.</p>
-        {% endif %}
-    </div>
-    <div class="panel panel-cobranzas">
-        <h2><i class="fa-solid fa-hand-holding-dollar"></i>Cobranzas</h2>
-        {% if cobranzas_data %}
-            <table class="summary-table">
-                <tbody>
-                    <tr>
-                        <td>Vencimientos</td>
-                        <td class="numeric">{{ format_number(cobranzas_data.vencimientos, is_currency=True) }}</td>
-                    </tr>
-                    <tr>
-                        <td>Cobrado</td>
-                        <td class="numeric">{{ format_number(cobranzas_data.cobrado, is_currency=True) }}</td>
-                    </tr>
-                    <tr>
-                        <td>Saldo Pendiente</td>
-                        <td class="numeric">{{ format_number(cobranzas_data.saldo, is_currency=True) }}</td>
-                    </tr>
-                </tbody>
-            </table>
-        {% else %}
-            <p>No hay datos de cobranzas para el período seleccionado.</p>
-        {% endif %}
-    </div>
+    <a href="{{ url_for('ventas') }}" class="panel-link">
+        <div class="panel panel-ventas clickable">
+            <h2><i class="fa-solid fa-seedling"></i>Ventas</h2>
+            {% if ventas_data or total_liquidado_toneladas > 0 %}
+                <p><strong>Total Tns. Liquidadas:</strong> <span class="numeric">{{ format_number(total_liquidado_toneladas, decimals=2) }}</span></p>
+                <p><strong>Monto Total Liquidado:</strong> <span class="numeric">{{ format_number(total_liquidado_monto, is_currency=True) }}</span></p>
+                <table class="summary-table">
+                    <thead>
+                        <tr>
+                            <th>Grano</th>
+                            <th class="numeric">Entregas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in ventas_data %}
+                        <tr>
+                            <td>{{ item.grano }}</td>
+                            <td class="numeric">{{ format_number(item.toneladas_entregadas, decimals=2) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No hay datos de ventas para el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </a>
+    <a href="{{ url_for('fletes') }}" class="panel-link">
+        <div class="panel panel-fletes clickable">
+            <h2><i class="fa-solid fa-truck-fast"></i>Fletes</h2>
+            {% if fletes_data %}
+                <table class="summary-table">
+                    <tbody>
+                        <tr>
+                            <td>Toneladas Transportadas</td>
+                            <td class="numeric">{{ format_number(fletes_data.toneladas_transportadas, decimals=2) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Monto Facturado</td>
+                            <td class="numeric">{{ format_number(fletes_data.monto_facturado, is_currency=True) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Cantidad de Viajes</td>
+                            <td class="numeric">{{ fletes_data.cantidad_viajes }}</td>
+                        </tr>
+                        <tr>
+                            <td>Kilómetros Recorridos</td>
+                            <td class="numeric">{{ format_number(fletes_data.kilometros_recorridos) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No hay datos de fletes para el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </a>
+    <a href="{{ url_for('cobranzas') }}" class="panel-link">
+        <div class="panel panel-cobranzas clickable">
+            <h2><i class="fa-solid fa-hand-holding-dollar"></i>Cobranzas</h2>
+            {% if cobranzas_data %}
+                <table class="summary-table">
+                    <tbody>
+                        <tr>
+                            <td>Vencimientos</td>
+                            <td class="numeric">{{ format_number(cobranzas_data.vencimientos, is_currency=True) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Cobrado</td>
+                            <td class="numeric">{{ format_number(cobranzas_data.cobrado, is_currency=True) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Saldo Pendiente</td>
+                            <td class="numeric">{{ format_number(cobranzas_data.saldo, is_currency=True) }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No hay datos de cobranzas para el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </a>
     <div class="panel panel-kpis">
         <h2><i class="fa-solid fa-chart-line"></i>Stock y Pendientes</h2>
         {% if stock_data %}
