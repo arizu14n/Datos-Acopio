@@ -1,56 +1,58 @@
 {% extends "base.html" %}
-{% block title %}Página Principal - Acopio{% endblock %}
+{% block title %}Bienvenido - Sistema Acopio{% endblock %}
 
 {% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/home.css') }}">
 <style>
-    .home-container {
+    .hero {
+        display: flex;
+        align-items: center;
+        justify-content: center;
         text-align: center;
-        position: relative;
-        padding-top: 50px;
-    }
-    .cycle-image {
-        width: 150px;
-        height: 150px;
-        object-fit: contain;
-        margin: 20px;
-    }
-    .arrow {
-        position: absolute;
-        width: 80px; /* Adjust size as needed */
-        height: 80px;
-        object-fit: contain;
-    }
-    #arrow1 {
-        top: 120px;
-        left: 40%;
-        transform: rotate(120deg);
-    }
-    #arrow2 {
-        top: 250px;
-        left: 55%;
-        transform: rotate(-10deg);
-    }
-    #arrow3 {
-        top: 120px;
-        right: 40%;
-        transform: rotate(240deg);
+        padding: 80px 20px;
+        background: linear-gradient(135deg, rgba(46, 125, 50, 0.85), rgba(27, 94, 32, 0.95)), url("{{ url_for('static', filename='assets/Trigo.png') }}");
+        background-size: cover;
+        background-position: center;
+        color: white;
+        min-height: 50vh;
+        border-radius: 0 0 30px 30px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.2);
     }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="home-container">
-    <h1>Acopio de Cereales</h1>
-    <div>
-       
-        <img src="{{ url_for('static', filename='assets/Maiz.png') }}" alt="Maíz" class="cycle-image">
-         <img src="{{ url_for('static', filename='assets/Trigo.png') }}" alt="Trigo" class="cycle-image">
-        <img src="{{ url_for('static', filename='assets/Soja.png') }}" alt="Soja" class="cycle-image">
-        
-        <img src="{{ url_for('static', filename='assets/Flecha.png') }}" class="arrow" id="arrow1">
-        <img src="{{ url_for('static', filename='assets/Flecha.png') }}" class="arrow" id="arrow2">
-        <img src="{{ url_for('static', filename='assets/Flecha.png') }}" class="arrow" id="arrow3">
+<section class="hero">
+    <div class="hero-content">
+        <h1>Sistema de Gestión de Acopio</h1>
+        <p>Centralice la información de sus operaciones de acopio, fletes y ventas de manera eficiente y visual.</p>
+        <a href="{{ url_for('dashboard') }}" class="cta-button"><i class="fa-solid fa-chart-pie"></i> Ir al Dashboard</a>
     </div>
-    <p>Bienvenido al sistema de gestión de acopio.</p>
-</div>
+</section>
+
+<section class="features-section">
+    <h2>Módulos Principales</h2>
+    <div class="features-grid">
+        <div class="feature-card">
+            <i class="fa-solid fa-file-signature feature-icon"></i>
+            <h3>Ventas y Contratos</h3>
+            <p>Consulte el estado de los contratos, entregas, liquidaciones y saldos pendientes de un vistazo.</p>
+        </div>
+        <div class="feature-card">
+            <i class="fa-solid fa-truck-fast feature-icon"></i>
+            <h3>Gestión de Fletes</h3>
+            <p>Importe y administre los fletes, controle los kilómetros recorridos y los importes facturados.</p>
+        </div>
+        <div class="feature-card">
+            <i class="fa-solid fa-magnifying-glass-chart feature-icon"></i>
+            <h3>Consultas Dinámicas</h3>
+            <p>Realice búsquedas avanzadas de entregas y consulte información externa como el padrón de SISA.</p>
+        </div>
+        <div class="feature-card">
+            <i class="fa-solid fa-money-bill-wave feature-icon"></i>
+            <h3>Gestión de Cobranzas</h3>
+            <p>Visualice y gestione los vencimientos y cobranzas, con detalles de comprobantes y clientes.</p>
+        </div>
+    </div>
+</section>
 {% endblock %}

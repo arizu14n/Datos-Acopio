@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Fletes - Acopio{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/fletes.css') }}">
+{% endblock %}
+
+{% block content %}
+    <h1>Fletes</h1>
+
+    <div class="form-container">
+        <form method="POST" action="{{ url_for('fletes') }}">
+            <div class="filter-group">
+                <label>Fechas</label>
+                <div class="filter-group-row">
+                    <input type="date" id="fecha_desde" name="fecha_desde" class="form-control" value="{{ filtros_aplicados.fecha_desde or '' }}" title="Fecha Desde">
+                    <input type="date" id="fecha_hasta" name="fecha_hasta" class="form-control" value="{{ filtros_aplicados.fecha_hasta or '' }}" title="Fecha Hasta">
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label for="chofer">Chofer</label>
+                <div class="filter-group-row">
+                    <select id="chofer" name="chofer" class="form-control">
+                        <option value="">Todos</option>
+                        {% for chofer in choferes %}
+                            <option value="{{ chofer }}" {% if filtros_aplicados.chofer == chofer %}selected{% endif %}>{{ chofer }}</option>
+                        {% endfor %}
+                    </select>
+                    {% if nombre_chofer %}
+                        <span class="form-control" style="background-color: #eee;">{{ nombre_chofer }}</span>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="filter-group">
+                 <div class="filter-group-row">
+                    <button type="submit" class="btn btn-primary">Filtrar</button>
+                    <a href="{{ url_for('fletes') }}" class="btn btn-warning">Reiniciar</a>
+                    <a href="{{ url_for('importar_fletes_route') }}" class="btn btn-success">Importar Fletes desde DBF</a>
+                    <button type="button" id="new-flete-btn" class="btn btn-info">Cargar Flete Manual</button>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div class="table-container">
+        <table>
+            <thead>
+                <tr>
+                    <th>Fecha</th>
+                    <th>CTG</th>
+                    <th>Grano</th>
+                    <th>Cosecha</th>
+                    <th>Peso Origen</th>
+                    <th>Neto</th>
+                    <th>Tarifa Flete</th>
+                    <th>Importe</th>
+                    <th>Kilómetros</th>
+                    <th></th>
+                    <th>Localidad</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for flete in fletes %}
+                    <tr data-id="{{ flete.id }}">
+                        <td>{{ flete.G_FECHA }}</td>
+                        <td>{{ flete.G_CTG }}</td>
+                        <td>{{ flete.grano }}</td>
+                        <td>{{ flete.G_COSE }}</td>
+                        <td>{{ flete.O_PESO }}</td>
+                        <td>{{ flete.O_NETO }}</td>
+                        <td>{{ flete.G_TARFLET }}</td>
+                        <td>{{ flete.importe }}</td>
+                        <td><input type="text" class="km-input" value="{{ flete.G_KILOMETR }}"></td>
+                        <td><button class="btn btn-primary btn-sm save-km">Guardar</button></td>
+                        <td>{{ flete.localidad }}</td>
+                        <td>
+                            {% if flete.fuente == 'manual' %}
+                                <button class="btn btn-warning btn-sm edit-flete-btn" data-id="{{ flete.id }}">✏️</button>
+                            {% endif %}
+                        </td>
+                    </tr>
+                {% else %}
+                    <tr>
+                        <td colspan="12" style="text-align: center;">No hay datos para mostrar.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr>
+                    <td colspan="5"><strong>Totales</strong></td>
+                    <td id="total-neto"><strong>{{ totales.neto }}</strong></td>
+                    <td></td>
+                    <td id="total-importe"><strong>{{ totales.importe }}</strong></td>
+                    <td id="total-km"><strong>{{ totales.km }}</strong></td>
+                    <td></td> <!-- Col 10, empty -->
+                    <td><strong>Viajes: {{ totales.viajes }}</strong></td> <!-- Col 11, Localidad -->
+                    <td></td> <!-- Col 12, Acciones -->
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    <!-- The Modal -->
+    <div class="modal fade" id="fleteModal" tabindex="-1" aria-labelledby="fleteModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="fleteModalLabel"></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="fleteForm" method="POST">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="g_fecha" class="form-label">Fecha</label>
+                        <input type="date" class="form-control" id="g_fecha" name="g_fecha" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_ctg" class="form-label">CTG</label>
+                        <input type="text" class="form-control" id="g_ctg" name="g_ctg" required>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_cuilchof" class="form-label">Chofer</label>
+                        <select class="form-select" id="g_cuilchof" name="g_cuilchof" required>
+                            <option selected disabled value="">Seleccionar...</option>
+                            {% for cuil, nombre in all_choferes.items() %}
+                            <option value="{{ cuil }}">{{ nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="g_codi" class="form-label">Grano</label>
+                        <select class="form-select" id="g_codi" name="g_codi" required>
+                            <option selected disabled value="">Seleccionar...</option>
+                            {% for codigo, desc in granos.items() %}
+                            <option value="{{ codigo }}">{{ desc }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_cose" class="form-label">Cosecha</label>
+                        <input type="text" class="form-control" id="g_cose" name="g_cose">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="g_ctaplade" class="form-label">Localidad</label>
+                        <select class="form-select" id="g_ctaplade" name="g_ctaplade">
+                            <option selected disabled value="">Seleccionar...</option>
+                            {% for codigo, nombre in localidades.items() %}
+                            <option value="{{ codigo }}">{{ nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-3 mb-3">
+                        <label for="o_peso" class="form-label">Kilos Brutos</label>
+                        <input type="number" step="0.01" class="form-control" id="o_peso" name="o_peso" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="o_tara" class="form-label">Kilos Tara</label>
+                        <input type="number" step="0.01" class="form-control" id="o_tara" name="o_tara" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="g_tarflet" class="form-label">Tarifa</label>
+                        <input type="number" step="0.01" class="form-control" id="g_tarflet" name="g_tarflet" required>
+                    </div>
+                    <div class="col-md-3 mb-3">
+                        <label for="g_kilomet" class="form-label">Kilómetros</label>
+                        <input type="number" class="form-control" id="g_kilomet" name="g_kilomet" required>
+                    </div>
+                </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="button" id="deleteFleteBtn" class="btn btn-danger" style="display: none;">Eliminar</button>
+            <button type="submit" form="fleteForm" class="btn btn-primary save-btn">Guardar</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const updateKmUrl = "{{ url_for('update_km') }}";
+    const nuevoFleteUrl = "{{ url_for('nuevo_flete') }}";
+</script>
+<script src="{{ url_for('static', filename='js/fletes.js') }}"></script>
+{% endblock %}

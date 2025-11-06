@@ -1,40 +1,212 @@
 {% extends "base.html" %}
 {% block title %}Consultas - Acopio{% endblock %}
 
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/consultas.css') }}">
+{% endblock %}
+
 {% block content %}
     <h1>Consultas</h1>
+
+    <div class="form-container">
+        <h2>Consulta de Entregas</h2>
+        <form method="POST">
+            <input type="hidden" name="consultar_entregas" value="1">
+            
+            <div class="filter-group">
+                <label>Fechas</label>
+                <div class="filter-group-row">
+                    <input type="date" id="fecha_desde" name="fecha_desde" class="form-control" value="{{ filtros_aplicados.fecha_desde or '' }}" title="Fecha Desde">
+                    <input type="date" id="fecha_hasta" name="fecha_hasta" class="form-control" value="{{ filtros_aplicados.fecha_hasta or '' }}" title="Fecha Hasta">
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label>Grano y Cosecha</label>
+                <div class="filter-group-row">
+                    <select id="grano" name="grano" class="form-control">
+                        <option value="">Grano: Todos</option>
+                        {% for grano_code, grano_desc in granos %}
+                            <option value="{{ grano_code }}" {% if filtros_aplicados.grano == grano_code %}selected{% endif %}>{{ grano_desc }}</option>
+                        {% endfor %}
+                    </select>
+                    <select id="cosecha" name="cosecha" class="form-control">
+                        <option value="">Cosecha: Todas</option>
+                        {% for c in cosechas %}
+                            <option value="{{ c }}" {% if filtros_aplicados.cosecha == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label for="comprador">Comprador</label>
+                <select id="comprador" name="comprador" class="form-control">
+                    <option value="">Todos</option>
+                    {% for comp in compradores %}
+                        <option value="{{ comp }}" {% if filtros_aplicados.comprador == comp %}selected{% endif %}>{{ comp }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="filter-group">
+                 <div class="filter-group-row">
+                    <input type="submit" value="Consultar" class="btn btn-primary">
+                    <a href="#" class="btn btn-warning reiniciar-btn">Reiniciar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if entregas %}
+        <h2>Resultado de la Consulta de Entregas</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Contrato</th>
+                        <th>Comprador</th>
+                        <th>Grano</th>
+                        <th>Cosecha</th>
+                        <th>Kilos Netos</th>
+                        <th>CTG</th>
+                        <th>Destino</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entrega in entregas %}
+                        <tr>
+                            <td>{{ entrega.fecha }}</td>
+                            <td>{{ entrega.contrato }}</td>
+                            <td>{{ entrega.comprador }}</td>
+                            <td>{{ entrega.grano }}</td>
+                            <td>{{ entrega.cosecha }}</td>
+                            <td>{{ entrega.kilos_netos }}</td>
+                            <td>{{ entrega.ctg }}</td>
+                            <td>{{ entrega.destino }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+                {% if entregas %}
+                <tfoot>
+                    <tr class="grand-total">
+                        <td colspan="5" style="text-align: right;"><strong>Total Kilos Netos:</strong></td>
+                        <td><strong>{{ total_kilos_netos }}</strong></td>
+                        <td colspan="2"></td>
+                    </tr>
+                </tfoot>
+                {% endif %}
+            </table>
+        </div>
+    {% endif %}
+
+    <hr>
 
     <div class="form-container">
         <h2>Consulta SISA</h2>
         <form method="POST">
             <label for="cuit">CUIT:</label>
-            <input type="text" id="cuit" name="cuit" value="{{ cuit_consultado or '' }}" pattern="[0-9]*" title="Ingrese solo números">
-            <input type="submit" value="Consultar">
+            <input type="text" id="cuit" name="cuit" class="form-control" value="{{ cuit_consultado or '' }}" pattern="[0-9]*" title="Ingrese solo números">
+            <input type="submit" value="Consultar" class="btn btn-primary">
         </form>
     </div>
 
     {% if tabla_sisa %}
         <h2>Resultado de la Consulta SISA</h2>
-        <table border="1">
-            <thead>
-                <tr>
-                    {% for header in tabla_sisa.headers %}
-                        <th>{{ header }}</th>
-                    {% endfor %}
-                </tr>
-            </thead>
-            <tbody>
-                {% for row in tabla_sisa.rows %}
+        <div class="table-container">
+            <table>
+                <thead>
                     <tr>
-                        {% for cell in row %}
-                            <td>{{ cell }}</td>
+                        {% for header in tabla_sisa.headers %}
+                            <th>{{ header }}</th>
                         {% endfor %}
                     </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+                </thead>
+                <tbody>
+                    {% for row in tabla_sisa.rows %}
+                        <tr>
+                            {% for cell in row %}
+                                <td>{{ cell }}</td>
+                            {% endfor %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     {% elif error %}
         <p style="color: red;">{{ error }}</p>
     {% endif %}
+
+    <hr>
+
+    <div class="form-container">
+        <h2>Cuenta Corriente Granaria</h2>
+        <form method="POST">
+            <input type="hidden" name="consultar_granaria" value="1">
+            <div class="filter-group">
+                <label for="g_contrato_granaria">Contrato</label>
+                <select id="g_contrato_granaria" name="g_contrato_granaria" class="form-control">
+                    <option value="">Seleccione un contrato</option>
+                    {% for contrato in contratos_granaria %}
+                        <option value="{{ contrato }}" {% if g_contrato_filtro_granaria == contrato %}selected{% endif %}>{{ contrato }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <div class="filter-group-row">
+                    <input type="submit" value="Consultar" class="btn btn-primary">
+                    <a href="#" class="btn btn-warning reiniciar-btn">Reiniciar</a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if cuenta_corriente_data %}
+        <h2>Resultado de la Cuenta Corriente Granaria</h2>
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Fecha</th>
+                        <th>Comprobante</th>
+                        <th>Descripción</th>
+                        <th>Entregas</th>
+                        <th>Liquidaciones</th>
+                        <th>Saldo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for mov in cuenta_corriente_data %}
+                        <tr>
+                            <td>{{ mov.fecha }}</td>
+                            <td>{{ mov.comprobante }}</td>
+                            <td>{{ mov.descripcion }}</td>
+                            <td>{{ mov.entregas }}</td>
+                            <td>{{ mov.liquidaciones }}</td>
+                            <td>{{ mov.saldo }}</td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const reiniciarBotones = document.querySelectorAll('.reiniciar-btn');
+    reiniciarBotones.forEach(function(boton) {
+        boton.addEventListener('click', function(event) {
+            event.preventDefault(); // Evita que el enlace recargue la página
+            const form = this.closest('form'); // Encuentra el formulario padre del botón
+            if (form) {
+                form.reset(); // Resetea los campos del formulario
+                // Opcional: si quieres que la página se recargue para limpiar los resultados de la tabla
+                // window.location.href = window.location.pathname;
+            }
+        });
+    });
+});
+</script>
 
 {% endblock %}

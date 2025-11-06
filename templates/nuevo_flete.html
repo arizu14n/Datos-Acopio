@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+
+{% block title %}Nuevo Flete{% endblock %}
+
+{% block head_extra %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/nuevo_flete.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="form-container">
+    <h1 class="my-4 text-center">Cargar Nuevo Flete Manualmente</h1>
+
+    <form method="POST">
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="g_fecha" class="form-label">Fecha</label>
+                <input type="date" class="form-control" id="g_fecha" name="g_fecha" value="{{ today_date }}" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="g_ctg" class="form-label">CTG</label>
+                <input type="text" class="form-control" id="g_ctg" name="g_ctg" required>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="g_cuilchof" class="form-label">Chofer</label>
+                <select class="form-select" id="g_cuilchof" name="g_cuilchof" required>
+                    <option selected disabled value="">Seleccionar...</option>
+                    {% for cuil, nombre in choferes.items() %}
+                    <option value="{{ cuil }}">{{ nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <label for="g_codi" class="form-label">Grano</label>
+                <select class="form-select" id="g_codi" name="g_codi" required>
+                    <option selected disabled value="">Seleccionar...</option>
+                    {% for codigo, desc in granos.items() %}
+                    <option value="{{ codigo }}">{{ desc }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="g_cose" class="form-label">Cosecha</label>
+                <input type="text" class="form-control" id="g_cose" name="g_cose">
+            </div>
+            <div class="col-md-4 mb-3">
+                <label for="g_ctaplade" class="form-label">Localidad</label>
+                <select class="form-select" id="g_ctaplade" name="g_ctaplade">
+                    <option selected disabled value="">Seleccionar...</option>
+                    {% for codigo, nombre in localidades.items() %}
+                    <option value="{{ codigo }}">{{ nombre }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-3 mb-3">
+                <label for="o_peso" class="form-label">Kilos Brutos</label>
+                <input type="number" step="0.01" class="form-control" id="o_peso" name="o_peso" required>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="o_neto" class="form-label">Kilos Netos</label>
+                <input type="number" step="0.01" class="form-control" id="o_neto" name="o_neto" required>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="g_tarflet" class="form-label">Tarifa</label>
+                <input type="number" step="0.01" class="form-control" id="g_tarflet" name="g_tarflet" required>
+            </div>
+            <div class="col-md-3 mb-3">
+                <label for="g_kilomet" class="form-label">Kilómetros</label>
+                <input type="number" class="form-control" id="g_kilomet" name="g_kilomet" required>
+            </div>
+        </div>
+
+        <div class="d-flex justify-content-center gap-2 mt-4">
+            <button type="submit" class="btn btn-primary">Guardar Flete</button>
+            <a href="{{ url_for('fletes') }}" class="btn btn-secondary">Volver</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
