@@ -163,7 +163,7 @@ document.addEventListener('DOMContentLoaded', function() {
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    const mensaje = `Hola ${currentComprador}, Mensaje para: ${nombrePersona}. Se solicita/n ${cantidadCupos} cupo/s de ${currentGrano}, cosecha ${currentCosecha}, para el día ${formattedFecha}. Saludamos Atte. DRUETTO SRL`;
+                    const mensaje = `Hola ${currentComprador},\n\nMensaje para: ${nombrePersona}.\n\nSe solicita/n ${cantidadCupos} cupo/s de ${currentGrano}, cosecha ${currentCosecha}, para el día ${formattedFecha}.\n\nSaludamos Atte.\nDRUETTO SRL`;
                     const whatsappUrl = `whatsapp://send?text=${encodeURIComponent(mensaje)}`;
                     window.open(whatsappUrl, '_blank');
                     pedirCuposModal.hide();

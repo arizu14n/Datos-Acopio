@@ -630,19 +630,23 @@ def ventas():
 def solicitar_cupo():
     try:
         data = request.json
+        num_cupos = int(data['cantidad'])
+        cantidad_por_cupo = 1  
+
         db = get_db()
         with db:
-            db.execute("""
-                INSERT INTO cupos_solicitados (contrato, grano, cosecha, cantidad, fecha_solicitud, nombre_persona)
-                VALUES (?, ?, ?, ?, ?, ?)
-            """, (
-                data['contrato'],
-                data['grano'],
-                data['cosecha'],
-                data['cantidad'],
-                data['fecha_solicitud'],
-                data['nombre_persona']
-            ))
+            for _ in range(num_cupos):
+                db.execute("""
+                    INSERT INTO cupos_solicitados (contrato, grano, cosecha, cantidad, fecha_solicitud, nombre_persona)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (
+                    data['contrato'],
+                    data['grano'],
+                    data['cosecha'],
+                    cantidad_por_cupo,
+                    data['fecha_solicitud'],
+                    data['nombre_persona']
+                ))
         return jsonify({'success': True})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -1008,11 +1012,52 @@ def cobranzas():
     total_cobranzas = 0
 
     try:
+        # 1. Mapear Contrato -> Grano desde contrat.dbf
+        contrato_to_grano = {}
+        try:
+            with DBF(RUTA_CONTRAT_DBF, encoding='iso-8859-1') as tabla_contrat:
+                for rec in tabla_contrat:
+                    contrato = rec.get('NROCONT_C', '').strip()
+                    grano = rec.get('PRODUCT_C', 'N/A').strip()
+                    if contrato:
+                        contrato_to_grano[contrato] = grano
+        except FileNotFoundError:
+            print(f"Advertencia: No se encontró el archivo DBF: {RUTA_CONTRAT_DBF}")
+        except Exception as e:
+            print(f"Error al leer {RUTA_CONTRAT_DBF}: {e}")
+
+        # 2. Mapear Comprobante de Vencimiento -> Contrato
+        comprobante_to_contrato = {}
+        try:
+            with DBF(RUTA_LIQVEN_DBF, encoding='iso-8859-1') as tabla_liqven:
+                for rec in tabla_liqven:
+                    contrato = rec.get('CONTRATO', '').strip()
+                    if contrato:
+                        comprobante = f"{rec.get('FA1_C', '')}-{str(rec.get('FAC_C', '')).zfill(8)}"
+                        comprobante_to_contrato[comprobante] = contrato
+        except FileNotFoundError:
+            print(f"Advertencia: No se encontró el archivo DBF: {RUTA_LIQVEN_DBF}")
+        except Exception as e:
+            print(f"Error al leer {RUTA_LIQVEN_DBF}: {e}")
+
         clientes_map = {}
         with DBF(RUTA_SYSMAE_DBF, encoding='iso-8859-1') as tabla_sysmae:
             for rec in tabla_sysmae:
                 if rec.get('CLI_C') and rec.get('S_APELLI'):
                     clientes_map[rec['CLI_C'].strip()] = rec['S_APELLI'].strip()
+
+        # Build a map from vencimiento comprobante to grano
+        vencimiento_comprobante_to_grano = {}
+        with DBF(RUTA_CCBCTA_DBF, encoding='iso-8859-1') as tabla_ccbcta_for_map:
+            for rec in tabla_ccbcta_for_map:
+                tip_f = rec.get('TIP_F', '').strip().upper()
+                if tip_f in ('LF', 'LP'):
+                    comprobante = f"{rec.get('FA1_F', '')}-{str(rec.get('FAC_F', '')).zfill(8)}"
+                    contrato = comprobante_to_contrato.get(comprobante)
+                    if contrato:
+                        grano = contrato_to_grano.get(contrato, 'N/A')
+                        if grano != 'N/A':
+                            vencimiento_comprobante_to_grano[comprobante] = grano
 
         with DBF(RUTA_CCBCTA_DBF, encoding='iso-8859-1') as tabla_ccbcta:
             all_records = []
@@ -1021,8 +1066,7 @@ def cobranzas():
                 if isinstance(fecha_vto, datetime.date) and fecha_desde_dt <= fecha_vto <= fecha_hasta_dt:
                     all_records.append(rec)
 
-            # Sort all records by date and then by comprobante
-            all_records.sort(key=lambda r: (r.get('VTO_F'), f"{r.get('FA1_F', '')}-{str(r.get('FAC_F', '')).zfill(8)}"))
+            all_records.sort(key=lambda r: (f"{r.get('FA1_F', '')}-{str(r.get('FAC_F', '')).zfill(8)}", r.get('VTO_F')))
 
             for rec in all_records:
                 fecha_vto = rec.get('VTO_F')
@@ -1031,18 +1075,36 @@ def cobranzas():
                 cliente_code = rec.get('CLI_F', '').strip()
                 comprobante = f"{rec.get('FA1_F', '')}-{str(rec.get('FAC_F', '')).zfill(8)}"
 
-                item = {
-                    'vencimiento': format_date(fecha_vto),
-                    'cliente': clientes_map.get(cliente_code, cliente_code),
-                    'tipo': tip_f,
-                    'comprobante': comprobante,
-                    'importe': imp_f
-                }
-
                 if tip_f in ('LF', 'LP'):
+                    # Original logic for vencimientos
+                    contrato = comprobante_to_contrato.get(comprobante)
+                    grano = 'N/A'
+                    if contrato:
+                        grano = contrato_to_grano.get(contrato, 'N/A')
+                    
+                    item = {
+                        'vencimiento': format_date(fecha_vto),
+                        'cliente': clientes_map.get(cliente_code, cliente_code),
+                        'tipo': tip_f,
+                        'comprobante': comprobante,
+                        'importe': imp_f,
+                        'grano': grano
+                    }
                     vencimientos_list.append(item)
                     total_vencimientos += imp_f
                 elif tip_f in ('RI', 'SI', 'SG', 'SB'):
+                    # New logic for cobranzas
+                    cta_p_comprobante = rec.get('CTA_P', '').strip()
+                    # grano = vencimiento_comprobante_to_grano.get(cta_p_comprobante, 'N/A')
+
+                    item = {
+                        'vencimiento': format_date(fecha_vto),
+                        'cliente': clientes_map.get(cliente_code, cliente_code),
+                        'tipo': tip_f,
+                        'comprobante': comprobante,
+                        'importe': imp_f,
+                        'cta_p': cta_p_comprobante
+                    }
                     cobranzas_list.append(item)
                     total_cobranzas += imp_f
 
@@ -1050,6 +1112,15 @@ def cobranzas():
         print(f"Advertencia: No se encontró el archivo DBF: {e.filename}")
     except Exception as e:
         print(f"Error al leer los archivos DBF: {e}")
+
+    comprobante_sums = {}
+    for item in cobranzas_list:
+        comprobante = item['comprobante']
+        importe = item['importe']
+        comprobante_sums[comprobante] = comprobante_sums.get(comprobante, 0) + importe
+
+    for item in cobranzas_list:
+        item['total_comprobante'] = comprobante_sums.get(item['comprobante'], 0)
 
     return render_template('cobranzas.html', 
                            filtros_aplicados=filtros_aplicados,

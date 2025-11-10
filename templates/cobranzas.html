@@ -34,6 +34,7 @@
                             <th>Cuenta</th>
                             <th>Tipo</th>
                             <th>Comprobante</th>
+                            <th>Grano</th>
                             <th class="text-right">Importe</th>
                         </tr>
                     </thead>
@@ -44,17 +45,18 @@
                             <td>{{ item.cliente }}</td>
                             <td>{{ item.tipo }}</td>
                             <td>{{ item.comprobante }}</td>
+                            <td>{{ item.grano }}</td>
                             <td class="text-right">{{ format_number(item.importe, is_currency=True) }}</td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="5" class="text-center">No hay vencimientos en el período seleccionado.</td>
+                            <td colspan="6" class="text-center">No hay vencimientos en el período seleccionado.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
                     <tfoot>
                         <tr>
-                            <th colspan="4" class="text-right">Total Vencimientos:</th>
+                            <th colspan="5" class="text-right">Total Vencimientos:</th>
                             <th class="text-right">{{ format_number(total_vencimientos, is_currency=True) }}</th>
                         </tr>
                     </tfoot>
@@ -82,7 +84,7 @@
                             <td>{{ item.vencimiento }}</td>
                             <td>{{ item.cliente }}</td>
                             <td>{{ item.tipo }}</td>
-                            <td>{{ item.comprobante }}</td>
+                            <td title="Cta_p: {{ item.cta_p }} | Total: {{ format_number(item.total_comprobante, is_currency=True) }}">{{ item.comprobante }}</td>
                             <td class="text-right">{{ format_number(item.importe, is_currency=True) }}</td>
                         </tr>
                         {% else %}
