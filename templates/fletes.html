@@ -47,6 +47,7 @@
                     <th>CTG</th>
                     <th>Grano</th>
                     <th>Cosecha</th>
+                    <th>Categoría</th>
                     <th>Peso Origen</th>
                     <th>Neto</th>
                     <th>Tarifa Flete</th>
@@ -64,6 +65,7 @@
                         <td>{{ flete.g_ctg }}</td>
                         <td>{{ flete.grano }}</td>
                         <td>{{ flete.g_cose }}</td>
+                        <td>{{ flete.categoria }}</td>
                         <td>{{ flete.o_peso }}</td>
                         <td>{{ flete.o_neto }}</td>
                         <td>{{ flete.g_tarflet }}</td>
@@ -85,7 +87,7 @@
             </tbody>
             <tfoot>
                 <tr>
-                    <td colspan="5"><strong>Totales</strong></td>
+                    <td colspan="6"><strong>Totales</strong></td>
                     <td id="total-neto"><strong>{{ totales.neto }}</strong></td>
                     <td></td>
                     <td id="total-importe"><strong>{{ totales.importe }}</strong></td>
@@ -142,6 +144,17 @@
                         <input type="text" class="form-control" id="g_cose" name="g_cose">
                     </div>
                     <div class="col-md-4 mb-3">
+                        <label for="categoria" class="form-label">Categoría</label>
+                        <select class="form-select" id="categoria" name="categoria">
+                            <option selected disabled value="">Seleccionar...</option>
+                            <option value="ROSARIO">ROSARIO</option>
+                            <option value="HARINA - OTROS">HARINA - OTROS</option>
+                            <option value="ARRIMES">ARRIMES</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
                         <label for="g_ctaplade" class="form-label">Localidad</label>
                         <select class="form-select" id="g_ctaplade" name="g_ctaplade">
                             <option selected disabled value="">Seleccionar...</option>
@@ -150,21 +163,19 @@
                             {% endfor %}
                         </select>
                     </div>
-                </div>
-                <div class="row">
-                    <div class="col-md-3 mb-3">
+                    <div class="col-md-2 mb-3">
                         <label for="o_peso" class="form-label">Kilos Brutos</label>
                         <input type="number" step="0.01" class="form-control" id="o_peso" name="o_peso" required>
                     </div>
-                    <div class="col-md-3 mb-3">
+                    <div class="col-md-2 mb-3">
                         <label for="o_tara" class="form-label">Kilos Tara</label>
                         <input type="number" step="0.01" class="form-control" id="o_tara" name="o_tara" required>
                     </div>
-                    <div class="col-md-3 mb-3">
+                    <div class="col-md-2 mb-3">
                         <label for="g_tarflet" class="form-label">Tarifa</label>
                         <input type="number" step="0.01" class="form-control" id="g_tarflet" name="g_tarflet" required>
                     </div>
-                    <div class="col-md-3 mb-3">
+                    <div class="col-md-2 mb-3">
                         <label for="g_kilomet" class="form-label">Kilómetros</label>
                         <input type="number" class="form-control" id="g_kilomet" name="g_kilomet" required>
                     </div>

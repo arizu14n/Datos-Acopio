@@ -170,7 +170,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     pedirCuposForm.reset();
                     location.reload(); // Recargar la página para ver la nueva tabla
                 } else {
-                    alert('Error al solicitar el cupo.');
+                    alert('Error al solicitar el cupo: ' + data.error);
                 }
             });
 

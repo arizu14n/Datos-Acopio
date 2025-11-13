@@ -116,6 +116,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById("g_codi").value = data.g_codi;
                     document.getElementById("g_cose").value = data.g_cose;
                     document.getElementById("g_ctaplade").value = data.g_ctaplade;
+                    document.getElementById("categoria").value = data.categoria;
                     document.getElementById("o_peso").value = data.o_peso;
                     
                     const tara = data.o_peso - data.o_neto;

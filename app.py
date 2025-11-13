@@ -265,12 +265,13 @@ def dashboard():
                 pendiente = pendiente_data['kilos']
                 
                 if stock > 0 or pendiente > 0:
-                    porcentaje_afectado = (pendiente / stock) * 100 if stock > 0 else 100
+                    # Convert stock to float for consistent type operation and handle division by zero
+                    porcentaje_afectado = (pendiente / float(stock)) * 100 if float(stock) > 0 else (100 if pendiente > 0 else 0)
 
                     stock_data.append({
                         'grano': grano,
                         'cosecha': cosecha,
-                        'stock': stock / 1000,
+                        'stock': float(stock) / 1000, # Also convert here for consistency
                         'pendiente': pendiente / 1000,
                         'porcentaje_afectado': porcentaje_afectado
                     })
@@ -1270,6 +1271,7 @@ def nuevo_flete():
                     g_kilomet = int(request.form['g_kilomet'])
                     g_ctaplade = request.form['g_ctaplade']
                     g_cuilchof = request.form['g_cuilchof']
+                    categoria = request.form['categoria']
 
                     if o_peso <= o_tara:
                         return "Error: Los Kilos Brutos deben ser mayores que los Kilos Tara."
@@ -1279,9 +1281,9 @@ def nuevo_flete():
                     importe = round((o_neto / 1000) * g_tarflet, 2)
 
                     cursor.execute("""
-                        INSERT INTO fletes (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, fuente)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, 'manual'))
+                        INSERT INTO fletes (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, fuente, categoria)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, 'manual', categoria))
                     
                     conn.commit()
                     return redirect(url_for('fletes'))
@@ -1400,6 +1402,7 @@ def fletes():
                     flete_dict['grano'] = granos_map.get(flete_dict['g_codi'], flete_dict['g_codi'])
                     flete_dict['localidad'] = localidades_map.get(flete_dict['g_ctaplade'], flete_dict['g_ctaplade'])
                     flete_dict['g_cuilchof_nombre'] = choferes_map.get(flete_dict['g_cuilchof'], flete_dict['g_cuilchof'])
+                    flete_dict['categoria'] = flete_dict.get('categoria') or ''
                     fletes_procesados.append(flete_dict)
 
                 totales = {
@@ -1646,6 +1649,7 @@ def edit_flete(flete_id):
             g_kilomet = int(request.form['g_kilomet'])
             g_ctaplade = request.form['g_ctaplade']
             g_cuilchof = request.form['g_cuilchof']
+            categoria = request.form['categoria']
 
             if o_peso <= o_tara:
                 return "Error: Los Kilos Brutos deben ser mayores que los Kilos Tara."
@@ -1656,9 +1660,9 @@ def edit_flete(flete_id):
 
             cursor.execute("""
                 UPDATE fletes 
-                SET g_fecha = %s, g_ctg = %s, g_codi = %s, g_cose = %s, o_peso = %s, o_neto = %s, g_tarflet = %s, g_kilomet = %s, g_ctaplade = %s, g_cuilchof = %s, importe = %s
+                SET g_fecha = %s, g_ctg = %s, g_codi = %s, g_cose = %s, o_peso = %s, o_neto = %s, g_tarflet = %s, g_kilomet = %s, g_ctaplade = %s, g_cuilchof = %s, importe = %s, categoria = %s
                 WHERE id = %s
-            """, (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, flete_id))
+            """, (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, categoria, flete_id))
             
             conn.commit()
             return redirect(url_for('fletes'))
