@@ -34,7 +34,7 @@ tfoot { font-weight: bold; background-color: #f2f2f2; }
     font-size: 14px;
     border: none;
     cursor: pointer;
-    height: fit-content;
+    white-space: nowrap;
 }
 .btn-primary { background-color: #337ab7; }
 .btn-warning { background-color: #f0ad4e; }

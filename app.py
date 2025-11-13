@@ -1320,147 +1320,127 @@ def nuevo_flete():
 @app.route('/fletes', methods=['GET', 'POST'])
 def fletes():
     try:
+        fletes_procesados = []
+        sorted_choferes_filtrados = OrderedDict()
+        filtros_aplicados = {}
+        nombre_chofer_seleccionado = None
+        totales = {'neto': 0, 'importe': 0, 'viajes': 0, 'km': 0}
+        granos_map = {}
+        sorted_all_choferes = OrderedDict()
+        unique_localidades = OrderedDict()
+        
         conn = get_db()
         if not conn:
             return "<h1>Error: No se pudo conectar a la base de datos.</h1>"
 
         try:
             with get_dict_cursor(conn) as cursor:
-                # --- Mapeo de Granos, Localidades, Choferes (se mantiene igual) ---
+                # --- Mapeo de Granos, Localidades, Choferes ---
                 cursor.execute("SELECT g_codi, g_desc FROM acogran")
                 granos_map = {rec['g_codi']: rec['g_desc'].strip() for rec in cursor.fetchall()}
 
                 cursor.execute("SELECT cli_c, s_locali FROM sysmae")
-                localidades_map = {rec['cli_c']: rec['s_locali'].strip() for rec in cursor.fetchall()}
+                localidades_map = {rec['cli_c'].strip(): rec['s_locali'].strip() for rec in cursor.fetchall() if rec.get('cli_c') and rec.get('s_locali')}
+                
+                unique_localidades = OrderedDict(sorted(localidades_map.items(), key=lambda item: item[1]))
+
 
                 cursor.execute("SELECT c_document, c_nombre FROM choferes")
-                choferes_map = {rec['c_document'].strip(): rec['c_nombre'].strip() for rec in cursor.fetchall()}
+                choferes_map = {rec['c_document'].strip(): rec['c_nombre'].strip() for rec in cursor.fetchall() if rec.get('c_document') and rec.get('c_nombre')}
+
+                # --- Filtros ---
+                if request.method == 'POST':
+                    filtros_aplicados['chofer'] = request.form.get('chofer')
+                    filtros_aplicados['fecha_desde'] = request.form.get('fecha_desde')
+                    filtros_aplicados['fecha_hasta'] = request.form.get('fecha_hasta')
+                else: # GET
+                    today = datetime.date.today()
+                    first_day_of_month = today.replace(day=1)
+                    filtros_aplicados['fecha_desde'] = first_day_of_month.strftime('%Y-%m-%d')
+                    filtros_aplicados['fecha_hasta'] = today.strftime('%Y-%m-%d')
+                    filtros_aplicados['chofer'] = None
                 
-                # Obtener CUILs de choferes que tienen registros en la tabla 'fletes'
+                query = "SELECT * FROM fletes WHERE 1=1"
+                params = []
+
+                if filtros_aplicados.get('chofer'):
+                    query += " AND g_cuilchof = %s"
+                    params.append(filtros_aplicados['chofer'])
+                if filtros_aplicados.get('fecha_desde'):
+                    query += " AND g_fecha >= %s"
+                    params.append(filtros_aplicados['fecha_desde'])
+                if filtros_aplicados.get('fecha_hasta'):
+                    query += " AND g_fecha <= %s"
+                    params.append(filtros_aplicados['fecha_hasta'])
+                
+                query += " ORDER BY g_fecha DESC"
+                cursor.execute(query, params)
+                fletes_db = cursor.fetchall()
+
+                # --- Procesamiento de Fletes ---
+                total_neto = 0
+                total_importe = 0
+                total_km = 0
+
+                for flete in fletes_db:
+                    flete_dict = dict(flete)
+                    total_neto += flete_dict.get('o_neto', 0) or 0
+                    total_importe += flete_dict.get('importe', 0) or 0
+                    total_km += flete_dict.get('g_kilomet', 0) or 0
+                    
+                    flete_dict['g_fecha'] = format_date(flete_dict.get('g_fecha'))
+                    flete_dict['g_ctg'] = flete_dict.get('g_ctg') or ''
+                    flete_dict['g_cose'] = flete_dict.get('g_cose') or ''
+                    flete_dict['o_peso'] = format_number(flete_dict.get('o_peso'), decimals=2)
+                    flete_dict['o_neto'] = format_number(flete_dict.get('o_neto'), decimals=2)
+                    flete_dict['g_tarflet'] = format_number(flete_dict.get('g_tarflet'), is_currency=True, decimals=2)
+                    flete_dict['importe'] = format_number(flete_dict.get('importe'), is_currency=True, decimals=2)
+                    flete_dict['g_kilomet'] = format_number(flete_dict.get('g_kilomet'), decimals=0)
+                    
+                    flete_dict['grano'] = granos_map.get(flete_dict['g_codi'], flete_dict['g_codi'])
+                    flete_dict['localidad'] = localidades_map.get(flete_dict['g_ctaplade'], flete_dict['g_ctaplade'])
+                    flete_dict['g_cuilchof_nombre'] = choferes_map.get(flete_dict['g_cuilchof'], flete_dict['g_cuilchof'])
+                    fletes_procesados.append(flete_dict)
+
+                totales = {
+                    'neto': format_number(total_neto, decimals=2),
+                    'importe': format_number(total_importe, is_currency=True, decimals=2),
+                    'viajes': len(fletes_procesados),
+                    'km': format_number(total_km, decimals=0)
+                }
+                
+                if filtros_aplicados.get('chofer'):
+                    nombre_chofer_seleccionado = choferes_map.get(filtros_aplicados['chofer'])
+
+                # --- Preparar datos para el template ---
                 cuils_con_registros = set()
                 cursor.execute("SELECT DISTINCT g_cuilchof FROM fletes WHERE g_cuilchof IS NOT NULL AND g_cuilchof != ''")
                 for row in cursor.fetchall():
                     cuils_con_registros.add(row['g_cuilchof'].strip())
 
-                # Filtrar choferes_map para incluir solo aquellos con registros
                 choferes_filtrados = {
                     cuil: nombre for cuil, nombre in choferes_map.items()
                     if cuil in cuils_con_registros
                 }
-
-                choferes_set = set(choferes_filtrados.keys())
-
-                # --- Obtener datos desde la base de datos ---
-                query = "SELECT * FROM fletes"
-                params = []
-
-                filtros_aplicados = {}
-                if request.method == 'POST':
-                    filtros_aplicados['fecha_desde'] = request.form.get('fecha_desde')
-                    filtros_aplicados['fecha_hasta'] = request.form.get('fecha_hasta')
-                    chofer_seleccionado = request.form.get('chofer')
-                    filtros_aplicados['chofer'] = chofer_seleccionado
-
-                    conditions = []
-                    if filtros_aplicados.get('fecha_desde'):
-                        conditions.append("g_fecha >= %s")
-                        params.append(filtros_aplicados['fecha_desde'])
-                    if filtros_aplicados.get('fecha_hasta'):
-                        conditions.append("g_fecha <= %s")
-                        params.append(filtros_aplicados['fecha_hasta'])
-                    if chofer_seleccionado:
-                        conditions.append("g_cuilchof = %s")
-                        params.append(chofer_seleccionado)
-                    
-                    if conditions:
-                        query += " WHERE " + " AND ".join(conditions)
-
-                else:
-                    # --- Fechas por defecto para GET ---
-                    today = datetime.date.today()
-                    first_day_of_month = today.replace(day=1)
-                    filtros_aplicados['fecha_desde'] = first_day_of_month.strftime('%Y-%m-%d')
-                    filtros_aplicados['fecha_hasta'] = today.strftime('%Y-%m-%d')
-                    
-                    query += " WHERE g_fecha >= %s AND g_fecha <= %s"
-                    params.extend([filtros_aplicados['fecha_desde'], filtros_aplicados['fecha_hasta']])
-
-                query += " ORDER BY g_cuilchof, g_fecha, g_ctg"
-                
-                cursor.execute(query, params)
-                fletes_data = cursor.fetchall()
-
-                # --- Procesamiento final y formato ---
-                fletes_procesados = []
-                total_neto = 0
-                total_km = 0
-                total_importe = 0
-                viajes_con_kilos = 0
-                for rec in fletes_data:
-                    kilos_netos = rec['o_neto'] or 0
-                    if kilos_netos != 0:
-                        viajes_con_kilos += 1
-
-                    importe = rec['importe'] or 0
-                    kilometros = rec['g_kilomet'] or 0 # La columna en 'fletes' es g_kilomet, sin R
-                    total_neto += kilos_netos
-                    total_km += kilometros
-                    total_importe += importe
-                    
-                    flete = {
-                        'id': rec['id'],
-                        'G_FECHA': format_date(rec['g_fecha']),
-                        'G_CTG': rec['g_ctg'],
-                        'grano': granos_map.get(rec['g_codi'], rec['g_codi']),
-                        'G_COSE': rec['g_cose'],
-                        'O_PESO': format_number(rec['o_peso']),
-                        'O_NETO': format_number(kilos_netos),
-                        'G_TARFLET': format_number(rec['g_tarflet'], is_currency=True),
-                        'G_KILOMETR': kilometros,
-                        'localidad': localidades_map.get(rec['g_ctaplade'], 'N/A'),
-                        'importe': format_number(importe, is_currency=True),
-                        'fuente': rec['fuente']
-                    }
-                    fletes_procesados.append(flete)
-
-                totales = {
-                    'viajes': viajes_con_kilos,
-                    'neto': format_number(total_neto),
-                    'km': total_km,
-                    'importe': format_number(total_importe, is_currency=True)
-                }
-                
-                nombre_chofer_seleccionado = None
-                if filtros_aplicados.get('chofer'):
-                    nombre_chofer_seleccionado = choferes_map.get(filtros_aplicados['chofer'])
-
-                # Crear diccionario de localidades unicas ordenado por nombre
-                sorted_localidades = OrderedDict(sorted(localidades_map.items(), key=lambda item: item[1]))
-                unique_localidades = OrderedDict()
-                seen_names = set()
-                for code, name in sorted_localidades.items():
-                    if name not in seen_names:
-                        unique_localidades[code] = name
-                        seen_names.add(name)
-
-                # Ordenar choferes por nombre para el modal
+                sorted_choferes_filtrados = OrderedDict(sorted(choferes_filtrados.items(), key=lambda item: item[1]))
                 sorted_all_choferes = OrderedDict(sorted(choferes_map.items(), key=lambda item: item[1]))
-
-                return render_template('fletes.html', 
-                                       fletes=fletes_procesados, 
-                                       choferes=sorted(list(choferes_set)),
-                                       filtros_aplicados=filtros_aplicados,
-                                       nombre_chofer=nombre_chofer_seleccionado,
-                                       totales=totales,
-                                       granos=granos_map,
-                                       all_choferes=sorted_all_choferes,
-                                       localidades=unique_localidades)
         finally:
             if conn:
                 conn.close()
 
+        return render_template('fletes.html', 
+                               fletes=fletes_procesados, 
+                               choferes=sorted_choferes_filtrados.items(),
+                               filtros_aplicados=filtros_aplicados,
+                               nombre_chofer=nombre_chofer_seleccionado,
+                               totales=totales,
+                               granos=granos_map,
+                               all_choferes=sorted_all_choferes,
+                               localidades=unique_localidades)
+
     except Exception as e:
-        return f"<h1>Ocurrió un error: {e}</h1>"
+        import traceback
+        return f"<h1>Ocurrió un error: {e}</h1><pre>{traceback.format_exc()}</pre>"
 
 @app.route('/pdf/<tipo_reporte>')
 def generar_pdf(tipo_reporte):

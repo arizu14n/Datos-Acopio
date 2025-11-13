@@ -24,17 +24,12 @@
                     <select id="chofer" name="chofer" class="form-control">
                         <option value="">Todos</option>
                         {% for chofer in choferes %}
-                            <option value="{{ chofer }}" {% if filtros_aplicados.chofer == chofer %}selected{% endif %}>{{ chofer }}</option>
+                            <option value="{{ chofer[0] }}" {% if filtros_aplicados.chofer == chofer[0] %}selected{% endif %}>{{ chofer[1] }}</option>
                         {% endfor %}
                     </select>
                     {% if nombre_chofer %}
                         <span class="form-control" style="background-color: #eee;">{{ nombre_chofer }}</span>
                     {% endif %}
-                </div>
-            </div>
-
-            <div class="filter-group">
-                 <div class="filter-group-row">
                     <button type="submit" class="btn btn-primary">Filtrar</button>
                     <a href="{{ url_for('fletes') }}" class="btn btn-warning">Reiniciar</a>
                     <a href="{{ url_for('importar_fletes_route') }}" class="btn btn-success">Importar Fletes desde DBF</a>
@@ -65,15 +60,15 @@
             <tbody>
                 {% for flete in fletes %}
                     <tr data-id="{{ flete.id }}">
-                        <td>{{ flete.G_FECHA }}</td>
-                        <td>{{ flete.G_CTG }}</td>
+                        <td>{{ flete.g_fecha }}</td>
+                        <td>{{ flete.g_ctg }}</td>
                         <td>{{ flete.grano }}</td>
-                        <td>{{ flete.G_COSE }}</td>
-                        <td>{{ flete.O_PESO }}</td>
-                        <td>{{ flete.O_NETO }}</td>
-                        <td>{{ flete.G_TARFLET }}</td>
+                        <td>{{ flete.g_cose }}</td>
+                        <td>{{ flete.o_peso }}</td>
+                        <td>{{ flete.o_neto }}</td>
+                        <td>{{ flete.g_tarflet }}</td>
                         <td>{{ flete.importe }}</td>
-                        <td><input type="text" class="km-input" value="{{ flete.G_KILOMETR }}"></td>
+                        <td><input type="text" class="km-input" value="{{ flete.g_kilomet }}"></td>
                         <td><button class="btn btn-primary btn-sm save-km">Guardar</button></td>
                         <td>{{ flete.localidad }}</td>
                         <td>
