@@ -5,6 +5,10 @@ call .\venv\Scripts\activate.bat
 REM Establece la variable de entorno para Flask
 set FLASK_APP=app.py
 
+REM Sincroniza la base de datos desde los archivos DBF
+echo "Sincronizando la base de datos con los archivos .dbf..."
+python sync_db.py
+
 REM Inicia el servidor de Flask en segundo plano
 echo "Iniciando servidor de Flask..."
 start "Flask Server" /B flask run --host=0.0.0.0

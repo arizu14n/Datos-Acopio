@@ -5,4 +5,5 @@ requests
 beautifulsoup4
 selenium
 webdriver-manager
-chart.js
+psycopg2-binary
+SQLAlchemy
