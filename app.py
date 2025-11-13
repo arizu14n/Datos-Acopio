@@ -1391,8 +1391,8 @@ def fletes():
                     flete_dict['g_fecha'] = format_date(flete_dict.get('g_fecha'))
                     flete_dict['g_ctg'] = flete_dict.get('g_ctg') or ''
                     flete_dict['g_cose'] = flete_dict.get('g_cose') or ''
-                    flete_dict['o_peso'] = format_number(flete_dict.get('o_peso'), decimals=2)
-                    flete_dict['o_neto'] = format_number(flete_dict.get('o_neto'), decimals=2)
+                    flete_dict['o_peso'] = format_number(flete_dict.get('o_peso'), decimals=0)
+                    flete_dict['o_neto'] = format_number(flete_dict.get('o_neto'), decimals=0)
                     flete_dict['g_tarflet'] = format_number(flete_dict.get('g_tarflet'), is_currency=True, decimals=2)
                     flete_dict['importe'] = format_number(flete_dict.get('importe'), is_currency=True, decimals=2)
                     flete_dict['g_kilomet'] = format_number(flete_dict.get('g_kilomet'), decimals=0)
