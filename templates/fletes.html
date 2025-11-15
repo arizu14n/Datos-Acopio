@@ -51,8 +51,8 @@
                     <th>Peso Origen</th>
                     <th>Neto</th>
                     <th>Tarifa Flete</th>
-                    <th>Importe</th>
-                    <th>Kilómetros</th>
+                    <th class="importe-col">Importe</th>
+                    <th class="km-col">Kilómetros</th>
                     <th></th>
                     <th>Localidad</th>
                     <th>Acciones</th>
@@ -69,19 +69,17 @@
                         <td>{{ flete.o_peso }}</td>
                         <td>{{ flete.o_neto }}</td>
                         <td>{{ flete.g_tarflet }}</td>
-                        <td>{{ flete.importe }}</td>
-                        <td><input type="text" class="km-input" value="{{ flete.g_kilomet }}"></td>
+                        <td class="importe-col">{{ flete.importe }}</td>
+                        <td class="km-col"><input type="text" class="km-input" value="{{ flete.g_kilomet }}"></td>
                         <td><button class="btn btn-primary btn-sm save-km">Guardar</button></td>
                         <td>{{ flete.localidad }}</td>
                         <td>
-                            {% if flete.fuente == 'manual' %}
-                                <button class="btn btn-warning btn-sm edit-flete-btn" data-id="{{ flete.id }}">✏️</button>
-                            {% endif %}
+                            <button class="btn btn-warning btn-sm edit-flete-btn" data-id="{{ flete.id }}">✏️</button>
                         </td>
                     </tr>
                 {% else %}
                     <tr>
-                        <td colspan="12" style="text-align: center;">No hay datos para mostrar.</td>
+                        <td colspan="13" style="text-align: center;">No hay datos para mostrar.</td>
                     </tr>
                 {% endfor %}
             </tbody>
@@ -90,11 +88,10 @@
                     <td colspan="6"><strong>Totales</strong></td>
                     <td id="total-neto"><strong>{{ totales.neto }}</strong></td>
                     <td></td>
-                    <td id="total-importe"><strong>{{ totales.importe }}</strong></td>
-                    <td id="total-km"><strong>{{ totales.km }}</strong></td>
-                    <td></td> <!-- Col 10, empty -->
-                    <td><strong>Viajes: {{ totales.viajes }}</strong></td> <!-- Col 11, Localidad -->
-                    <td></td> <!-- Col 12, Acciones -->
+                    <td id="total-importe" class="importe-col"><strong>{{ totales.importe }}</strong></td>
+                    <td id="total-km" class="km-col"><strong>{{ totales.km }}</strong></td>
+                    <td colspan="2"><strong>Viajes: {{ totales.viajes }}</strong></td>
+                    <td></td>
                 </tr>
             </tfoot>
         </table>

@@ -32,6 +32,7 @@
     font-size: 1.8rem;
 }
 .panel-ventas { background: linear-gradient(135deg, #1e88e5, #42a5f5); } /* Blue */
+.panel-compras { background: linear-gradient(135deg, #f9a825, #fdd835); } /* Yellow/Amber */
 .panel-fletes { background: linear-gradient(135deg, #43a047, #66bb6a); } /* Green */
 .panel-cobranzas { background: linear-gradient(135deg, #f4511e, #ff7043); } /* Orange */
 .panel-kpis { background: linear-gradient(135deg, #5e35b1, #7e57c2); } /* Purple */

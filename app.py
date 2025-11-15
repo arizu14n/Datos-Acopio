@@ -308,6 +308,11 @@ def dashboard():
         else:
             cobranzas_data = {'vencimientos': 0, 'cobrado': 0, 'saldo': 0}
 
+        # --- Lógica para Panel de Compras (Placeholder) ---
+        compras_data = {
+            'monto_total': 0,
+            'cantidad_compras': 0
+        }
 
         return render_template('dashboard.html',
                                filtros_aplicados=filtros_aplicados,
@@ -316,7 +321,8 @@ def dashboard():
                                total_liquidado_toneladas=total_liquidado_toneladas,
                                total_liquidado_monto=total_liquidado_monto,
                                stock_data=stock_data,
-                               cobranzas_data=cobranzas_data)
+                               cobranzas_data=cobranzas_data,
+                               compras_data=compras_data)
     except Exception as e:
         # For debugging purposes, returning the error to the page can be helpful
         import traceback
@@ -623,6 +629,10 @@ def ventas():
         return f"<h1>Error: No se encontró el archivo DBF: {e.filename}</h1>"
     except Exception as e:
         return f"<h1>Ocurrió un error al leer el archivo: {e}</h1>"
+
+@app.route('/compras')
+def compras():
+    return render_template('compras.html')
 
 @app.route('/cupos/solicitar', methods=['POST'])
 def solicitar_cupo():
@@ -1167,19 +1177,14 @@ def importar_fletes_desde_acohis():
 
                 added_count = 0
                 skipped_count = 0
+                updated_count = 0
                 for rec in fletes_data:
                     g_ctg = rec.get('g_ctg')
                     if not g_ctg:
                         skipped_count += 1
                         continue
 
-                    cursor.execute("SELECT id FROM fletes WHERE g_ctg = %s", (g_ctg,))
-                    exists = cursor.fetchone()
-
-                    if exists:
-                        skipped_count += 1
-                        continue
-
+                    # Common data processing
                     kilos_netos = rec.get('o_neto', 0) or 0
                     tarifa = rec.get('g_tarflet', 0) or 0
                     try:
@@ -1190,9 +1195,40 @@ def importar_fletes_desde_acohis():
                         tarifa_float = float(tarifa)
                     except (ValueError, TypeError):
                         tarifa_float = 0.0
-
+                    
                     importe = round((kilos_netos_float / 1000) * tarifa_float, 2)
+                    
+                    # Check if flete exists
+                    cursor.execute("SELECT id, o_neto FROM fletes WHERE g_ctg = %s", (g_ctg,))
+                    existing_flete = cursor.fetchone()
 
+                    if existing_flete:
+                        # 3) Comparar si ha cambiado el Neto para un mismo CTG.
+                        if existing_flete['o_neto'] != kilos_netos_float:
+                            cursor.execute("""
+                                UPDATE fletes 
+                                SET g_fecha = %s, g_codi = %s, g_cose = %s, o_peso = %s, o_neto = %s, g_tarflet = %s, g_kilomet = %s, g_ctaplade = %s, g_cuilchof = %s, importe = %s, fuente = %s
+                                WHERE id = %s
+                            """, (
+                                rec.get('g_fecha').strftime('%Y-%m-%d') if isinstance(rec.get('g_fecha'), datetime.date) else None,
+                                rec.get('g_codi'),
+                                rec.get('g_cose'),
+                                rec.get('o_peso'),
+                                kilos_netos_float,
+                                tarifa_float,
+                                (rec.get('g_kilometR', 0) or 0) * 2,
+                                rec.get('g_ctaplade'),
+                                rec.get('g_cuilchof'),
+                                importe,
+                                'dbf-updated',
+                                existing_flete['id']
+                            ))
+                            updated_count += 1
+                        else:
+                            skipped_count += 1
+                        continue
+
+                    # If it doesn't exist, insert it
                     cursor.execute("""
                         INSERT INTO fletes (g_fecha, g_ctg, g_codi, g_cose, o_peso, o_neto, g_tarflet, g_kilomet, g_ctaplade, g_cuilchof, importe, fuente)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
@@ -1203,7 +1239,7 @@ def importar_fletes_desde_acohis():
                         rec.get('g_cose'),
                         rec.get('o_peso'),
                         kilos_netos_float,
-                        tarifa_float, # Corregido: g_kilometR
+                        tarifa_float,
                         (rec.get('g_kilometR', 0) or 0) * 2,
                         rec.get('g_ctaplade'),
                         rec.get('g_cuilchof'),
@@ -1212,7 +1248,7 @@ def importar_fletes_desde_acohis():
                     ))
                     added_count += 1
             conn.commit()
-            return f"Importación completada. {added_count} registros agregados, {skipped_count} registros omitidos (duplicados o sin CTG)."
+            return f"Importación completada. {added_count} registros agregados, {updated_count} actualizados, {skipped_count} omitidos."
         except Exception as e:
             conn.rollback()
             return f"Ocurrió un error durante la importación: {e}"
@@ -1388,25 +1424,38 @@ def fletes():
                     flete_dict = dict(flete)
                     total_neto += flete_dict.get('o_neto', 0) or 0
                     total_importe += flete_dict.get('importe', 0) or 0
-                    total_km += flete_dict.get('g_kilomet', 0) or 0
                     
+                    # 1) Multiplicar kilometros x 2
+                    kilometros = flete_dict.get('g_kilomet', 0) or 0
+                    kilometros_ida_y_vuelta = kilometros # los km ya están almacenados como ida y vuelta.
+                    total_km += kilometros_ida_y_vuelta
+
                     flete_dict['g_fecha'] = format_date(flete_dict.get('g_fecha'))
                     flete_dict['g_ctg'] = flete_dict.get('g_ctg') or ''
+                    
+                    # 2) Asignar categoría según CTG
+                    if flete_dict['g_ctg'].startswith('102'):
+                        flete_dict['categoria'] = 'ROSARIO'
+                    elif flete_dict['g_ctg'].startswith('101'):
+                        flete_dict['categoria'] = 'ARRIMES'
+                    else:
+                        flete_dict['categoria'] = flete_dict.get('categoria') or ''
+
                     flete_dict['g_cose'] = flete_dict.get('g_cose') or ''
                     flete_dict['o_peso'] = format_number(flete_dict.get('o_peso'), decimals=0)
                     flete_dict['o_neto'] = format_number(flete_dict.get('o_neto'), decimals=0)
                     flete_dict['g_tarflet'] = format_number(flete_dict.get('g_tarflet'), is_currency=True, decimals=2)
                     flete_dict['importe'] = format_number(flete_dict.get('importe'), is_currency=True, decimals=2)
-                    flete_dict['g_kilomet'] = format_number(flete_dict.get('g_kilomet'), decimals=0)
+                    flete_dict['g_kilomet'] = format_number(kilometros_ida_y_vuelta, decimals=0)
                     
                     flete_dict['grano'] = granos_map.get(flete_dict['g_codi'], flete_dict['g_codi'])
                     flete_dict['localidad'] = localidades_map.get(flete_dict['g_ctaplade'], flete_dict['g_ctaplade'])
                     flete_dict['g_cuilchof_nombre'] = choferes_map.get(flete_dict['g_cuilchof'], flete_dict['g_cuilchof'])
-                    flete_dict['categoria'] = flete_dict.get('categoria') or ''
+                    
                     fletes_procesados.append(flete_dict)
 
                 totales = {
-                    'neto': format_number(total_neto, decimals=2),
+                    'neto': format_number(total_neto, decimals=0),
                     'importe': format_number(total_importe, is_currency=True, decimals=2),
                     'viajes': len(fletes_procesados),
                     'km': format_number(total_km, decimals=0)

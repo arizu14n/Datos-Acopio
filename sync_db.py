@@ -191,7 +191,7 @@ def sync_dbfs_to_postgres():
             CREATE TABLE IF NOT EXISTS fletes (
                 id SERIAL PRIMARY KEY, g_fecha DATE, g_ctg VARCHAR(255) UNIQUE, g_codi VARCHAR(255), g_cose VARCHAR(255),
                 o_peso NUMERIC, o_neto NUMERIC, g_tarflet NUMERIC, g_kilomet INTEGER, g_ctaplade VARCHAR(255),
-                g_cuilchof VARCHAR(255), importe NUMERIC, fuente VARCHAR(50)
+                g_cuilchof VARCHAR(255), importe NUMERIC, fuente VARCHAR(50), categoria VARCHAR(255)
             );""")
             print("\nTabla 'fletes' creada o ya existente.")
 

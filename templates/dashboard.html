@@ -48,6 +48,27 @@
             {% endif %}
         </div>
     </a>
+    <a href="{{ url_for('compras') }}" class="panel-link">
+        <div class="panel panel-compras clickable">
+            <h2><i class="fa-solid fa-cart-shopping"></i>Compras</h2>
+            {% if compras_data %}
+                <table class="summary-table">
+                    <tbody>
+                        <tr>
+                            <td>Monto Total</td>
+                            <td class="numeric">{{ format_number(compras_data.monto_total, is_currency=True) }}</td>
+                        </tr>
+                        <tr>
+                            <td>Cantidad de Compras</td>
+                            <td class="numeric">{{ compras_data.cantidad_compras }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No hay datos de compras para el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </a>
     <a href="{{ url_for('fletes') }}" class="panel-link">
         <div class="panel panel-fletes clickable">
             <h2><i class="fa-solid fa-truck-fast"></i>Fletes</h2>
