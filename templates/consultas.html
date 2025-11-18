@@ -163,7 +163,10 @@
     </div>
 
     {% if cuenta_corriente_data %}
-        <h2>Resultado de la Cuenta Corriente Granaria</h2>
+        <div class="table-header">
+            <h2>Resultado de la Cuenta Corriente Granaria</h2>
+            <a href="{{ url_for('generar_pdf', tipo_reporte='cuenta_corriente_granaria', contrato=g_contrato_filtro_granaria) }}" class="btn btn-secondary" target="_blank">Exportar a PDF</a>
+        </div>
         <div class="table-container">
             <table>
                 <thead>

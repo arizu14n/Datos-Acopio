@@ -2,6 +2,144 @@
 {% block title %}Compras - Acopio{% endblock %}
 
 {% block content %}
-    <h1>Gestión de Compras</h1>
+<div class="container-fluid">
+    <h1 class="mt-4">Gestión de Compras</h1>
     <p>Esta página se utilizará para gestionar las compras.</p>
+
+    <!-- Formulario de Filtros -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-filter"></i> Filtros
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('compras') }}">
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="fecha_desde">Fecha Desde</label>
+                            <input type="date" class="form-control" id="fecha_desde" name="fecha_desde" value="{{ filtros_aplicados.fecha_desde }}">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="fecha_hasta">Fecha Hasta</label>
+                            <input type="date" class="form-control" id="fecha_hasta" name="fecha_hasta" value="{{ filtros_aplicados.fecha_hasta }}">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="vendedor">Vendedor</label>
+                            <select class="form-control" id="vendedor" name="vendedor">
+                                <option value="">Todos</option>
+                                {% for code, name in vendedores.items() %}
+                                    <option value="{{ code }}" {% if filtros_aplicados.vendedor == code %}selected{% endif %}>{{ name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="grano">Grano</label>
+                            <select class="form-control" id="grano" name="grano">
+                                <option value="">Todos</option>
+                                {% for code, name in granos.items() %}
+                                    <option value="{{ code }}" {% if filtros_aplicados.grano == code %}selected{% endif %}>{{ name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="cosecha">Cosecha</label>
+                            <select class="form-control" id="cosecha" name="cosecha">
+                                <option value="">Todas</option>
+                                {% for c in cosechas %}
+                                    <option value="{{ c }}" {% if filtros_aplicados.cosecha == c %}selected{% endif %}>{{ c }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="form-group">
+                            <label for="origen">Origen</label>
+                            <select class="form-control" id="origen" name="origen">
+                                <option value="">Todos</option>
+                                {% for code, name in origenes.items() %}
+                                    <option value="{{ code }}" {% if filtros_aplicados.origen == code %}selected{% endif %}>{{ name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-primary">Filtrar</button>
+                        <a href="{{ url_for('compras') }}" class="btn btn-secondary">Limpiar Filtros</a>
+                        <a href="{{ url_for('export_compras_pdf', **filtros_aplicados) }}" class="btn btn-danger" target="_blank">
+                            <i class="fas fa-file-pdf"></i> Exportar a PDF
+                        </a>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de Resultados -->
+    <div class="card">
+        <div class="card-header">
+            <i class="fas fa-table"></i> Resultados
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>CTG</th>
+                            <th>Vendedor</th>
+                            <th>Grano</th>
+                            <th>Cosecha</th>
+                            <th>Origen</th>
+                            <th class="text-right">Kilos Brutos</th>
+                            <th class="text-right">Mermas</th>
+                            <th class="text-right">Kilos Netos</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for compra in compras %}
+                        <tr>
+                            <td>{{ compra.fecha }}</td>
+                            <td>{{ compra.ctg }}</td>
+                            <td>{{ compra.vendedor }}</td>
+                            <td>{{ compra.grano }}</td>
+                            <td>{{ compra.cosecha }}</td>
+                            <td>{{ compra.origen }}</td>
+                            <td class="text-right">{{ compra.kilos_brutos }}</td>
+                            <td class="text-right">{{ compra.mermas }}</td>
+                            <td class="text-right">{{ compra.kilos_netos }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="9" class="text-center">No se encontraron registros con los filtros aplicados.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    {% if compras %}
+                    <tfoot>
+                        <tr>
+                            <th colspan="6" class="text-center">TOTALES (Registros: {{ totales.registros }})</th>
+                            <th class="text-right">{{ totales.kilos_brutos }}</th>
+                            <th class="text-right">{{ totales.mermas }}</th>
+                            <th class="text-right">{{ totales.kilos_netos }}</th>
+                        </tr>
+                    </tfoot>
+                    {% endif %}
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
+

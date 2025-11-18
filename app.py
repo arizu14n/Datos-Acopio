@@ -13,6 +13,7 @@ import requests
 from bs4 import BeautifulSoup
 import psycopg2
 from psycopg2.extras import DictCursor
+from dateutil.relativedelta import relativedelta
 
 # --- CONFIGURACIÓN DE LOCALIZACIÓN PARA FORMATO DE NÚMEROS ---
 try:
@@ -94,6 +95,7 @@ def format_number(value, is_currency=False, decimals=0):
         return value
 
 app.jinja_env.globals.update(format_number=format_number)
+app.jinja_env.globals.update(format_date=format_date)
 
 class PDF(FPDF):
     def header(self):
@@ -308,11 +310,58 @@ def dashboard():
         else:
             cobranzas_data = {'vencimientos': 0, 'cobrado': 0, 'saldo': 0}
 
-        # --- Lógica para Panel de Compras (Placeholder) ---
-        compras_data = {
-            'monto_total': 0,
-            'cantidad_compras': 0
-        }
+        # --- Lógica para Panel de Compras ---
+        compras_data = []
+        conn = get_db()
+        if conn:
+            try:
+                with get_dict_cursor(conn) as cursor:
+                    query = """
+                        SELECT 
+                            a.g_codi, 
+                            g.g_desc, 
+                            SUM(a.o_neto) as total_kilos, 
+                            COUNT(*) as movimientos
+                        FROM acohis a
+                        JOIN acogran g ON a.g_codi = g.g_codi
+                        WHERE a.g_ctl = 'I' AND a.g_fecha BETWEEN %s AND %s
+                        GROUP BY a.g_codi, g.g_desc
+                        ORDER BY g.g_desc
+                    """
+                    cursor.execute(query, (fecha_desde_dt, fecha_hasta_dt))
+                    compras_raw = cursor.fetchall()
+                    for row in compras_raw:
+                        compras_data.append({
+                            'grano': row['g_desc'],
+                            'kilos': row['total_kilos'],
+                            'movimientos': row['movimientos']
+                        })
+            except Exception as e:
+                print(f"Error al leer compras desde PostgreSQL: {e}")
+            finally:
+                if conn:
+                    conn.close()
+
+        # --- Lógica para Tarjeta de Vencimientos ---
+        vencimientos_hoy = {'total': 0, 'pendientes': 0}
+        conn = get_db()
+        if conn:
+            try:
+                with get_dict_cursor(conn) as cursor:
+                    today = datetime.date.today()
+                    cursor.execute(
+                        "SELECT COUNT(*) as total, SUM(CASE WHEN completada = FALSE THEN 1 ELSE 0 END) as pendientes FROM agenda WHERE fecha_vencimiento = %s",
+                        (today,)
+                    )
+                    result = cursor.fetchone()
+                    if result:
+                        vencimientos_hoy['total'] = result['total'] or 0
+                        vencimientos_hoy['pendientes'] = result['pendientes'] or 0
+            except Exception as e:
+                print(f"Error al leer vencimientos de la agenda desde PostgreSQL: {e}")
+            finally:
+                if conn:
+                    conn.close()
 
         return render_template('dashboard.html',
                                filtros_aplicados=filtros_aplicados,
@@ -322,7 +371,8 @@ def dashboard():
                                total_liquidado_monto=total_liquidado_monto,
                                stock_data=stock_data,
                                cobranzas_data=cobranzas_data,
-                               compras_data=compras_data)
+                               compras_data=compras_data,
+                               vencimientos_hoy=vencimientos_hoy)
     except Exception as e:
         # For debugging purposes, returning the error to the page can be helpful
         import traceback
@@ -630,9 +680,135 @@ def ventas():
     except Exception as e:
         return f"<h1>Ocurrió un error al leer el archivo: {e}</h1>"
 
-@app.route('/compras')
+@app.route('/compras', methods=['GET', 'POST'])
 def compras():
-    return render_template('compras.html')
+    conn = get_db()
+    if not conn:
+        return "<h1>Error: No se pudo conectar a la base de datos.</h1>"
+
+    try:
+        with get_dict_cursor(conn) as cursor:
+            # --- Obtener valores para los filtros ---
+            cursor.execute("SELECT DISTINCT g_codi FROM acohis WHERE g_ctl = 'I' AND g_codi IS NOT NULL")
+            grano_codes = [row['g_codi'] for row in cursor.fetchall()]
+            
+            granos = {}
+            if grano_codes:
+                cursor.execute("SELECT g_codi, g_desc FROM acogran WHERE g_codi IN %s", (tuple(grano_codes),))
+                for rec in cursor.fetchall():
+                    granos[rec['g_codi']] = rec['g_desc'].strip()
+
+            cursor.execute("SELECT DISTINCT g_cose FROM acohis WHERE g_ctl = 'I' AND g_cose IS NOT NULL ORDER BY g_cose DESC")
+            cosechas = [row['g_cose'] for row in cursor.fetchall()]
+
+            cursor.execute("SELECT DISTINCT cli_c FROM acohis WHERE g_ctl = 'I' AND cli_c IS NOT NULL")
+            vendedor_codes = [row['cli_c'] for row in cursor.fetchall()]
+            
+            vendedores = {}
+            if vendedor_codes:
+                cursor.execute("SELECT cli_c, s_apelli FROM sysmae WHERE cli_c IN %s", (tuple(vendedor_codes),))
+                for rec in cursor.fetchall():
+                    vendedores[rec['cli_c']] = rec['s_apelli'].strip()
+
+            cursor.execute("SELECT DISTINCT g_ctaplade FROM acohis WHERE g_ctl = 'I' AND g_ctaplade IS NOT NULL")
+            origen_codes = [row['g_ctaplade'] for row in cursor.fetchall()]
+
+            origenes = {}
+            if origen_codes:
+                cursor.execute("SELECT cli_c, s_locali FROM sysmae WHERE cli_c IN %s", (tuple(origen_codes),))
+                for rec in cursor.fetchall():
+                    origenes[rec['cli_c']] = rec['s_locali'].strip()
+
+            # --- Procesar filtros ---
+            filtros_aplicados = {}
+            query = "SELECT * FROM acohis WHERE g_ctl = 'I'"
+            params = []
+
+            if request.method == 'POST':
+                filtros_aplicados['fecha_desde'] = request.form.get('fecha_desde')
+                filtros_aplicados['fecha_hasta'] = request.form.get('fecha_hasta')
+                filtros_aplicados['vendedor'] = request.form.get('vendedor')
+                filtros_aplicados['grano'] = request.form.get('grano')
+                filtros_aplicados['cosecha'] = request.form.get('cosecha')
+                filtros_aplicados['origen'] = request.form.get('origen')
+            else:
+                today = datetime.date.today()
+                first_day_of_month = today.replace(day=1)
+                filtros_aplicados['fecha_desde'] = first_day_of_month.strftime('%Y-%m-%d')
+                filtros_aplicados['fecha_hasta'] = today.strftime('%Y-%m-%d')
+
+            if filtros_aplicados.get('fecha_desde'):
+                query += " AND g_fecha >= %s"
+                params.append(filtros_aplicados['fecha_desde'])
+            if filtros_aplicados.get('fecha_hasta'):
+                query += " AND g_fecha <= %s"
+                params.append(filtros_aplicados['fecha_hasta'])
+            if filtros_aplicados.get('vendedor'):
+                query += " AND cli_c = %s"
+                params.append(filtros_aplicados['vendedor'])
+            if filtros_aplicados.get('grano'):
+                query += " AND g_codi = %s"
+                params.append(filtros_aplicados['grano'])
+            if filtros_aplicados.get('cosecha'):
+                query += " AND g_cose = %s"
+                params.append(filtros_aplicados['cosecha'])
+            if filtros_aplicados.get('origen'):
+                query += " AND g_ctaplade = %s"
+                params.append(filtros_aplicados['origen'])
+            
+            query += " ORDER BY g_fecha DESC"
+            cursor.execute(query, params)
+            compras_data = cursor.fetchall()
+
+            # --- Procesar datos para la tabla y calcular totales ---
+            tabla_compras = []
+            total_kilos_brutos = 0
+            total_mermas = 0
+            total_kilos_netos = 0
+
+            for compra in compras_data:
+                kilos_brutos = compra.get('o_peso', 0) or 0
+                kilos_netos = compra.get('o_neto', 0) or 0
+                mermas = kilos_brutos - kilos_netos
+
+                total_kilos_brutos += kilos_brutos
+                total_mermas += mermas
+                total_kilos_netos += kilos_netos
+
+                tabla_compras.append({
+                    'fecha': format_date(compra.get('g_fecha')),
+                    'ctg': compra.get('g_ctg', ''),
+                    'vendedor': vendedores.get(compra.get('cli_c'), ''),
+                    'grano': granos.get(compra.get('g_codi'), ''),
+                    'cosecha': compra.get('g_cose', ''),
+                    'origen': origenes.get(compra.get('g_ctaplade'), ''),
+                    'kilos_brutos': format_number(kilos_brutos, decimals=2),
+                    'mermas': format_number(mermas, decimals=2),
+                    'kilos_netos': format_number(kilos_netos, decimals=2)
+                })
+            
+            record_count = len(compras_data)
+            totales = {
+                'registros': format_number(record_count, decimals=0),
+                'kilos_brutos': format_number(total_kilos_brutos, decimals=2),
+                'mermas': format_number(total_mermas, decimals=2),
+                'kilos_netos': format_number(total_kilos_netos, decimals=2)
+            }
+
+            return render_template('compras.html',
+                                   compras=tabla_compras,
+                                   filtros_aplicados=filtros_aplicados,
+                                   vendedores=vendedores,
+                                   granos=granos,
+                                   cosechas=cosechas,
+                                   origenes=origenes,
+                                   totales=totales)
+    except Exception as e:
+        import traceback
+        return f"<h1>Ocurrió un error en Compras: {e}</h1><pre>{traceback.format_exc()}</pre>"
+    finally:
+        if conn:
+            conn.close()
 
 @app.route('/cupos/solicitar', methods=['POST'])
 def solicitar_cupo():
@@ -1172,7 +1348,8 @@ def importar_fletes_desde_acohis():
 
         try:
             with get_dict_cursor(conn) as cursor:
-                cursor.execute("SELECT * FROM acohis WHERE g_cuitran = '30-68979922-8' AND g_ctl = 'V' AND g_cose >= '20/21'")
+                # Se busca en 'V' (Ventas/Salidas) y 'I' (Ingresos) para obtener todos los fletes.
+                cursor.execute("SELECT * FROM acohis WHERE g_cuitran = '30-68979922-8' AND g_ctl IN ('V', 'I') AND g_cose >= '20/21'")
                 fletes_data = cursor.fetchall()
 
                 added_count = 0
@@ -1216,7 +1393,7 @@ def importar_fletes_desde_acohis():
                                 rec.get('o_peso'),
                                 kilos_netos_float,
                                 tarifa_float,
-                                (rec.get('g_kilometR', 0) or 0) * 2,
+                                (rec.get('g_kilometr', 0) or 0) * 2,
                                 rec.get('g_ctaplade'),
                                 rec.get('g_cuilchof'),
                                 importe,
@@ -1240,7 +1417,7 @@ def importar_fletes_desde_acohis():
                         rec.get('o_peso'),
                         kilos_netos_float,
                         tarifa_float,
-                        (rec.get('g_kilometR', 0) or 0) * 2,
+                        (rec.get('g_kilometr', 0) or 0) * 2,
                         rec.get('g_ctaplade'),
                         rec.get('g_cuilchof'),
                         importe,
@@ -1339,10 +1516,9 @@ def nuevo_flete():
             
             sorted_choferes = OrderedDict(sorted(choferes_map.items(), key=lambda item: item[1]))
 
-            cursor.execute("SELECT cli_c, s_locali FROM sysmae")
-            localidades_map = {rec['cli_c'].strip(): rec['s_locali'].strip() for rec in cursor.fetchall() if rec.get('cli_c') and rec.get('s_locali')}
-
-            sorted_localidades = OrderedDict(sorted(localidades_map.items(), key=lambda item: item[1]))
+            cursor.execute("SELECT cli_c, s_locali FROM sysmae WHERE s_locali IS NOT NULL AND s_locali != '' ORDER BY s_locali")
+            localidades_temp = {rec['s_locali'].strip(): rec['cli_c'].strip() for rec in cursor.fetchall()}
+            sorted_localidades = OrderedDict(sorted({v: k for k, v in localidades_temp.items()}.items(), key=lambda item: item[1]))
 
             today_date = datetime.date.today().strftime('%Y-%m-%d')
                     
@@ -1377,10 +1553,13 @@ def fletes():
                 cursor.execute("SELECT g_codi, g_desc FROM acogran")
                 granos_map = {rec['g_codi']: rec['g_desc'].strip() for rec in cursor.fetchall()}
 
-                cursor.execute("SELECT cli_c, s_locali FROM sysmae")
-                localidades_map = {rec['cli_c'].strip(): rec['s_locali'].strip() for rec in cursor.fetchall() if rec.get('cli_c') and rec.get('s_locali')}
+                cursor.execute("SELECT cli_c, s_locali FROM sysmae WHERE s_locali IS NOT NULL AND s_locali != ''")
+                all_localidades = cursor.fetchall()
                 
-                unique_localidades = OrderedDict(sorted(localidades_map.items(), key=lambda item: item[1]))
+                localidades_map = {rec['cli_c'].strip(): rec['s_locali'].strip() for rec in all_localidades}
+
+                localidades_temp = {rec['s_locali'].strip(): rec['cli_c'].strip() for rec in all_localidades}
+                unique_localidades = OrderedDict(sorted({v: k for k, v in localidades_temp.items()}.items(), key=lambda item: item[1]))
 
 
                 cursor.execute("SELECT c_document, c_nombre FROM choferes")
@@ -1500,26 +1679,88 @@ def generar_pdf(tipo_reporte):
     if not contrato:
         return "Error: No se especificó un contrato.", 400
 
-    if tipo_reporte == 'entregas':
-        table_name = 'acocarpo'
-        filter_column = 'g_contrato'
-        title = f'Reporte de Entregas - Contrato {contrato}'
-        headers = ['FECHA', 'Nro Interno', 'CTG', 'Kilos Netos', 'DESTINO']
-    elif tipo_reporte == 'liquidaciones':
-        table_name = 'liqven'
-        filter_column = 'contrato'
-        title = f'Reporte de Liquidaciones - Contrato {contrato}'
-        headers = ['Fecha', 'COE', 'Peso', 'Precio', 'N.Grav.', 'IVA', 'Otros', 'Total']
-    else:
-        return "Error: Tipo de reporte no válido.", 400
-
     temp_filename = f"c:/Tests/Acopio/temp_{tipo_reporte}_{contrato}.pdf"
-    
     conn = get_db()
     if not conn:
         return "<h1>Error: No se pudo conectar a la base de datos.</h1>"
 
     try:
+        if tipo_reporte == 'cuenta_corriente_granaria':
+            title = f'Reporte de Cuenta Corriente Granaria - Contrato {contrato}'
+            headers = ['Fecha', 'Comprobante', 'Descripción', 'Entregas', 'Liquidaciones', 'Saldo']
+            
+            movimientos = []
+            with get_dict_cursor(conn) as cursor:
+                # Obtener Entregas
+                cursor.execute("SELECT g_fecha, g_ctg, g_saldo FROM acocarpo WHERE g_contrato = %s", (contrato,))
+                for rec in cursor.fetchall():
+                    if isinstance(rec.get('g_fecha'), datetime.date):
+                        movimientos.append({
+                            'fecha': rec['g_fecha'],
+                            'comprobante': rec.get('g_ctg', ''),
+                            'descripcion': f"Entrega - CTG: {rec.get('g_ctg', '')}",
+                            'entregas': rec.get('g_saldo', 0) or 0,
+                            'liquidaciones': 0
+                        })
+                
+                # Obtener Liquidaciones
+                cursor.execute("SELECT fec_c, fac_c, fa1_c, peso FROM liqven WHERE contrato = %s", (contrato,))
+                for rec in cursor.fetchall():
+                    if isinstance(rec.get('fec_c'), datetime.date):
+                        fac_c_padded = str(rec.get('fac_c', '')).zfill(8)
+                        coe_val = f"{rec.get('fa1_c', '')}-{fac_c_padded}"
+                        movimientos.append({
+                            'fecha': rec['fec_c'],
+                            'comprobante': coe_val,
+                            'descripcion': f"Liquidación - COE: {coe_val}",
+                            'entregas': 0,
+                            'liquidaciones': rec.get('peso', 0) or 0
+                        })
+            
+            movimientos.sort(key=lambda x: x['fecha'])
+            
+            saldo = 0
+            table_data = []
+            for mov in movimientos:
+                saldo += mov['entregas'] - mov['liquidaciones']
+                table_data.append(OrderedDict([
+                    ('Fecha', format_date(mov['fecha'])),
+                    ('Comprobante', mov['comprobante']),
+                    ('Descripción', mov['descripcion']),
+                    ('Entregas', format_number(mov['entregas'])),
+                    ('Liquidaciones', format_number(mov['liquidaciones'])),
+                    ('Saldo', format_number(saldo))
+                ]))
+            
+            if not table_data:
+                return f"No se encontraron datos para el contrato {contrato} en el reporte de {tipo_reporte}.", 404
+
+            pdf = PDF()
+            pdf.title = title
+            pdf.add_page()
+            pdf.create_table(table_data, headers)
+            pdf.output(temp_filename)
+
+            with open(temp_filename, 'rb') as f:
+                pdf_data = f.read()
+            
+            return Response(pdf_data,
+                            mimetype='application/pdf',
+                            headers={'Content-Disposition': f'attachment;filename={tipo_reporte}_{contrato}.pdf'})
+
+        elif tipo_reporte == 'entregas':
+            table_name = 'acocarpo'
+            filter_column = 'g_contrato'
+            title = f'Reporte de Entregas - Contrato {contrato}'
+            headers = ['FECHA', 'Nro Interno', 'CTG', 'Kilos Netos', 'DESTINO']
+        elif tipo_reporte == 'liquidaciones':
+            table_name = 'liqven'
+            filter_column = 'contrato'
+            title = f'Reporte de Liquidaciones - Contrato {contrato}'
+            headers = ['Fecha', 'COE', 'Peso', 'Precio', 'N.Grav.', 'IVA', 'Otros', 'Total']
+        else:
+            return "Error: Tipo de reporte no válido.", 400
+
         with get_dict_cursor(conn) as cursor:
             cursor.execute(f"SELECT * FROM {table_name} WHERE {filter_column} = %s", (contrato,))
             registros = cursor.fetchall()
@@ -1604,7 +1845,6 @@ def generar_pdf(tipo_reporte):
             }
 
         pdf.create_table(table_data, headers, totals=totals_dict)
-
         pdf.output(temp_filename)
 
         with open(temp_filename, 'rb') as f:
@@ -1676,6 +1916,8 @@ def get_flete(flete_id):
             
             # Convert row object to a dictionary
             flete_dict = dict(flete)
+            if isinstance(flete_dict.get('g_fecha'), datetime.date):
+                flete_dict['g_fecha'] = flete_dict['g_fecha'].strftime('%Y-%m-%d')
             return jsonify(flete_dict)
     finally:
         if conn:
@@ -1688,17 +1930,43 @@ def edit_flete(flete_id):
         return "<h1>Error: No se pudo conectar a la base de datos.</h1>"
     try:
         with get_dict_cursor(conn) as cursor:
-            g_fecha = request.form['g_fecha']
-            g_ctg = request.form['g_ctg']
-            g_codi = request.form['g_codi']
-            g_cose = request.form['g_cose']
-            o_peso = float(request.form['o_peso'])
-            o_tara = float(request.form['o_tara'])
-            g_tarflet = float(request.form['g_tarflet'])
-            g_kilomet = int(request.form['g_kilomet'])
-            g_ctaplade = request.form['g_ctaplade']
-            g_cuilchof = request.form['g_cuilchof']
-            categoria = request.form['categoria']
+            form_data = request.form
+            
+            g_fecha = form_data.get('g_fecha')
+            g_ctg = form_data.get('g_ctg')
+            g_codi = form_data.get('g_codi')
+            g_cose = form_data.get('g_cose', '') # Optional
+            o_peso_str = form_data.get('o_peso')
+            o_tara_str = form_data.get('o_tara')
+            g_tarflet_str = form_data.get('g_tarflet')
+            g_kilomet_str = form_data.get('g_kilomet')
+            g_ctaplade = form_data.get('g_ctaplade', '') # Optional
+            g_cuilchof = form_data.get('g_cuilchof')
+            categoria = form_data.get('categoria', '') # Optional
+
+            required_fields_for_check = {
+                'g_fecha': g_fecha,
+                'g_ctg': g_ctg,
+                'g_codi': g_codi,
+                'o_peso': o_peso_str,
+                'o_tara': o_tara_str,
+                'g_tarflet': g_tarflet_str,
+                'g_kilomet': g_kilomet_str,
+                'g_cuilchof': g_cuilchof
+            }
+            
+            missing_fields = [key for key, value in required_fields_for_check.items() if value is None]
+            if missing_fields:
+                return f"Error: Faltan los siguientes campos en el formulario: {', '.join(missing_fields)}", 400
+
+            try:
+                o_peso = float(o_peso_str)
+                o_tara = float(o_tara_str)
+                g_tarflet = float(g_tarflet_str)
+                g_kilomet = int(g_kilomet_str)
+            except (ValueError, TypeError):
+                return "Error: Kilos, Tara, Tarifa y Kilómetros deben ser números válidos.", 400
+
 
             if o_peso <= o_tara:
                 return "Error: Los Kilos Brutos deben ser mayores que los Kilos Tara."
@@ -1720,7 +1988,8 @@ def edit_flete(flete_id):
         return "Error: El CTG ya existe."
     except Exception as e:
         conn.rollback()
-        return f"Error al editar el flete: {e}"
+        import traceback
+        return f"Error al editar el flete: {e}<br><pre>{traceback.format_exc()}</pre>", 500
     finally:
         if conn:
             conn.close()
@@ -1742,5 +2011,962 @@ def delete_flete(flete_id):
         if conn:
             conn.close()
 
+@app.route('/export_compras_pdf')
+
+def export_compras_pdf():
+
+    conn = get_db()
+
+    if not conn:
+
+        return "<h1>Error: No se pudo conectar a la base de datos.</h1>", 500
+
+
+
+    try:
+
+        with get_dict_cursor(conn) as cursor:
+
+            # --- Obtener valores para mapeo ---
+
+            cursor.execute("SELECT g_codi, g_desc FROM acogran")
+
+            granos = {rec['g_codi']: rec['g_desc'].strip() for rec in cursor.fetchall()}
+
+            
+
+            cursor.execute("SELECT cli_c, s_apelli FROM sysmae")
+
+            vendedores = {rec['cli_c']: rec['s_apelli'].strip() for rec in cursor.fetchall()}
+
+
+
+            cursor.execute("SELECT cli_c, s_locali FROM sysmae")
+
+            origenes = {rec['cli_c']: rec['s_locali'].strip() for rec in cursor.fetchall()}
+
+
+
+            # --- Procesar filtros ---
+
+            filtros = request.args
+
+            query = "SELECT * FROM acohis WHERE g_ctl = 'I'"
+
+            params = []
+
+
+
+            if filtros.get('fecha_desde'):
+
+                query += " AND g_fecha >= %s"
+
+                params.append(filtros['fecha_desde'])
+
+            if filtros.get('fecha_hasta'):
+                query += " AND g_fecha <= %s"
+                params.append(filtros['fecha_hasta'])
+            if filtros.get('vendedor'):
+                query += " AND cli_c = %s"
+                params.append(filtros['vendedor'])
+            if filtros.get('grano'):
+
+                query += " AND g_codi = %s"
+
+                params.append(filtros['grano'])
+
+            if filtros.get('cosecha'):
+
+                query += " AND g_cose = %s"
+
+                params.append(filtros['cosecha'])
+
+            if filtros.get('origen'):
+
+                query += " AND g_ctaplade = %s"
+
+                params.append(filtros['origen'])
+
+            
+
+            query += " ORDER BY g_fecha DESC"
+
+            cursor.execute(query, params)
+
+            compras_data = cursor.fetchall()
+
+
+
+            if not compras_data:
+
+                return "No se encontraron registros para generar el PDF.", 404
+
+
+
+            # --- Generar PDF ---
+
+            pdf = PDF(orientation='L', unit='mm', format='A4')
+
+            pdf.title = 'Reporte de Compras'
+
+            pdf.add_page()
+
+            
+
+            headers = ['Fecha', 'CTG', 'Vendedor', 'Grano', 'Cosecha', 'Origen', 'K. Brutos', 'Mermas', 'K. Netos']
+
+            
+
+            table_data = []
+
+            for compra in compras_data:
+
+                kilos_brutos = compra.get('o_peso', 0) or 0
+
+                kilos_netos = compra.get('o_neto', 0) or 0
+
+                mermas = kilos_brutos - kilos_netos
+
+
+
+                row = OrderedDict()
+
+                row['Fecha'] = format_date(compra.get('g_fecha'))
+
+                row['CTG'] = compra.get('g_ctg', '')
+
+                row['Vendedor'] = vendedores.get(compra.get('cli_c'), '')
+
+                row['Grano'] = granos.get(compra.get('g_codi'), '')
+
+                row['Cosecha'] = compra.get('g_cose', '')
+
+                row['Origen'] = origenes.get(compra.get('g_ctaplade'), '')
+
+                row['K. Brutos'] = format_number(kilos_brutos, decimals=2)
+
+                row['Mermas'] = format_number(mermas, decimals=2)
+
+                row['K. Netos'] = format_number(kilos_netos, decimals=2)
+
+                table_data.append(row)
+
+
+
+            pdf.create_table(table_data, headers=headers)
+
+            
+
+            # Devolver el PDF como respuesta
+
+            pdf_output = pdf.output(dest='S').encode('latin-1')
+
+            return Response(pdf_output,
+
+                            mimetype='application/pdf',
+
+                            headers={'Content-Disposition': 'attachment;filename=reporte_compras.pdf'})
+
+
+
+    except Exception as e:
+
+        import traceback
+
+        return f"<h1>Ocurrió un error al generar el PDF: {e}</h1><pre>{traceback.format_exc()}</pre>", 500
+
+    finally:
+
+        if conn:
+
+            conn.close()
+
+
+
+
+
+@app.route('/agenda', methods=['GET', 'POST'])
+
+
+
+
+
+@app.route('/agenda', methods=['GET', 'POST'])
+def agenda():
+
+
+
+
+
+    conn = get_db()
+
+
+
+
+
+    if not conn:
+
+
+
+
+
+        return "<h1>Error: No se pudo conectar a la base de datos.</h1>"
+
+
+
+
+
+
+
+
+
+
+
+    try:
+
+
+
+
+
+        with get_dict_cursor(conn) as cursor:
+
+
+
+
+
+            if request.method == 'POST':
+
+
+
+
+
+                action = request.form.get('action')
+
+
+
+
+
+                today = datetime.date.today()
+
+
+
+
+
+
+
+
+
+
+
+                if action == 'add':
+
+
+
+
+
+                    descripcion = request.form.get('descripcion')
+
+
+
+
+
+                    fecha_vencimiento_str = request.form.get('fecha_vencimiento')
+
+
+
+
+
+                    link = request.form.get('link')
+
+
+
+
+
+                    frecuencia = request.form.get('frecuencia')
+
+
+
+
+
+                    
+
+
+
+
+
+                    fecha_vencimiento = datetime.datetime.strptime(fecha_vencimiento_str, '%Y-%m-%d').date()
+
+
+
+
+
+
+
+
+
+
+
+                    if fecha_vencimiento < today:
+
+
+
+
+
+                        # Aquí podrías pasar un mensaje de error a la plantilla
+
+
+
+
+
+                        print("Error: No se puede agendar una tarea con fecha vencida.")
+
+
+
+
+
+                    else:
+
+
+
+
+
+                        cursor.execute(
+
+
+
+
+
+                            """INSERT INTO agenda (descripcion, fecha_vencimiento, link, frecuencia, completada)
+
+
+
+
+
+                               VALUES (%s, %s, %s, %s, %s)""",
+
+
+
+
+
+                            (descripcion, fecha_vencimiento, link, frecuencia, False)
+
+
+
+
+
+                        )
+
+
+
+
+
+                        conn.commit()
+
+
+
+
+
+
+
+
+
+
+
+                elif action == 'complete':
+
+
+
+
+
+                    tarea_id = request.form.get('tarea_id')
+
+
+
+
+
+                    cursor.execute("SELECT * FROM agenda WHERE id = %s", (tarea_id,))
+
+
+
+
+
+                    tarea = cursor.fetchone()
+
+
+
+
+
+
+
+
+
+
+
+                    if tarea:
+
+
+
+
+
+                        # Marcar la tarea actual como completada
+
+
+
+
+
+                        cursor.execute("UPDATE agenda SET completada = TRUE WHERE id = %s", (tarea_id,))
+
+
+
+
+
+
+
+
+
+
+
+                        # Si es recurrente, crear la nueva tarea
+
+
+
+
+
+                        if tarea['frecuencia'] != 'unica':
+
+
+
+
+
+                            nueva_fecha = None
+
+
+
+
+
+                            if tarea['frecuencia'] == 'diaria':
+
+
+
+
+
+                                nueva_fecha = tarea['fecha_vencimiento'] + relativedelta(days=1)
+
+
+
+
+
+                            elif tarea['frecuencia'] == 'semanal':
+
+
+
+
+
+                                nueva_fecha = tarea['fecha_vencimiento'] + relativedelta(weeks=1)
+
+
+
+
+
+                            elif tarea['frecuencia'] == 'mensual':
+
+
+
+
+
+                                nueva_fecha = tarea['fecha_vencimiento'] + relativedelta(months=1)
+
+
+
+
+
+                            elif tarea['frecuencia'] == 'anual':
+
+
+
+
+
+                                nueva_fecha = tarea['fecha_vencimiento'] + relativedelta(years=1)
+
+
+
+
+
+                            
+
+
+
+
+
+                            # Si la nueva fecha calculada ya pasó, la movemos a hoy.
+
+
+
+
+
+                            if nueva_fecha and nueva_fecha < today:
+
+
+
+
+
+                                nueva_fecha = today
+
+
+
+
+
+
+
+
+
+
+
+                            if nueva_fecha:
+
+
+
+
+
+                                cursor.execute(
+
+
+
+
+
+                                    """INSERT INTO agenda (descripcion, fecha_vencimiento, link, frecuencia, completada)
+
+
+
+
+
+                                       VALUES (%s, %s, %s, %s, %s)""",
+
+
+
+
+
+                                    (tarea['descripcion'], nueva_fecha, tarea['link'], tarea['frecuencia'], False)
+
+
+
+
+
+                                )
+
+
+
+
+
+                        conn.commit()
+
+
+
+
+
+                
+
+
+
+
+
+                elif action == 'delete':
+
+
+
+
+
+                    tarea_id = request.form.get('tarea_id')
+
+
+
+
+
+                    cursor.execute("DELETE FROM agenda WHERE id = %s", (tarea_id,))
+
+
+
+
+
+                    conn.commit()
+
+
+
+
+
+
+
+
+
+
+
+                elif action == 'add_password':
+
+
+
+
+
+                    titulo = request.form.get('titulo')
+
+
+
+
+
+                    descripcion = request.form.get('descripcion')
+
+
+
+
+
+                    link = request.form.get('link')
+
+
+
+
+
+                    usuario = request.form.get('usuario')
+
+
+
+
+
+                    contrasena = request.form.get('contrasena')
+
+
+
+
+
+                    vencimiento_str = request.form.get('vencimiento')
+
+
+
+
+
+                    vencimiento = None
+
+
+
+
+
+                    if vencimiento_str:
+
+
+
+
+
+                        vencimiento = datetime.datetime.strptime(vencimiento_str, '%Y-%m-%d').date()
+
+
+
+
+
+                    
+
+
+
+
+
+                    cursor.execute(
+
+
+
+
+
+                        """INSERT INTO passwords (titulo, descripcion, link, usuario, contrasena, vencimiento)
+
+
+
+
+
+                           VALUES (%s, %s, %s, %s, %s, %s)""",
+
+
+
+
+
+                        (titulo, descripcion, link, usuario, contrasena, vencimiento)
+
+
+
+
+
+                    )
+
+
+
+
+
+                    conn.commit()
+
+
+
+
+
+
+
+
+
+
+
+                elif action == 'delete_password':
+
+
+
+
+
+                    password_id = request.form.get('password_id')
+
+
+
+
+
+                    cursor.execute("DELETE FROM passwords WHERE id = %s", (password_id,))
+
+
+
+
+
+                    conn.commit()
+
+
+
+
+
+                    return redirect(url_for('agenda'))
+
+
+
+
+
+
+
+
+
+
+
+                
+
+
+
+
+
+
+
+
+
+
+
+                
+
+
+
+
+
+
+
+
+
+
+
+                
+
+
+
+
+
+
+
+
+
+
+
+                
+
+
+
+
+
+
+
+
+
+
+
+                
+
+
+
+
+
+
+
+
+
+
+
+                
+
+
+
+
+
+            cursor.execute("SELECT * FROM agenda WHERE completada = FALSE ORDER BY fecha_vencimiento ASC")
+
+
+
+
+
+            tareas = cursor.fetchall()
+
+
+
+
+
+            
+
+
+
+
+
+            cursor.execute("SELECT * FROM passwords ORDER BY titulo ASC")
+
+
+
+
+
+            passwords = cursor.fetchall()
+
+
+
+
+
+
+
+
+
+
+
+            return render_template('agenda.html', tareas=tareas, passwords=passwords)
+
+
+
+
+
+
+
+
+
+
+
+    except Exception as e:
+
+
+
+
+
+        import traceback
+
+
+
+
+
+        return f"<h1>Ocurrió un error en la Agenda: {e}</h1><pre>{traceback.format_exc()}</pre>"
+
+
+
+
+
+    finally:
+
+
+
+
+
+        if conn:
+
+
+
+
+
+            conn.close()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+@app.route('/agenda/<int:tarea_id>')
+def get_tarea(tarea_id):
+    conn = get_db()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos.'}), 500
+    try:
+        with get_dict_cursor(conn) as cursor:
+            cursor.execute('SELECT id, descripcion, fecha_vencimiento, link, frecuencia FROM agenda WHERE id = %s', (tarea_id,))
+            tarea = cursor.fetchone()
+            if tarea is None:
+                return jsonify({'error': 'Tarea no encontrada.'}), 404
+            
+            tarea_dict = dict(tarea)
+            if isinstance(tarea_dict.get('fecha_vencimiento'), datetime.date):
+                tarea_dict['fecha_vencimiento'] = tarea_dict['fecha_vencimiento'].strftime('%Y-%m-%d')
+            return jsonify(tarea_dict)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route('/agenda/edit/<int:tarea_id>', methods=['POST'])
+def edit_tarea(tarea_id):
+    conn = get_db()
+    if not conn:
+        return "<h1>Error: No se pudo conectar a la base de datos.</h1>", 500
+    try:
+        with get_dict_cursor(conn) as cursor:
+            descripcion = request.form.get('descripcion')
+            fecha_vencimiento_str = request.form.get('fecha_vencimiento')
+            link = request.form.get('link')
+            frecuencia = request.form.get('frecuencia')
+            
+            if not descripcion or not fecha_vencimiento_str or not frecuencia:
+                return "Error: Faltan campos obligatorios.", 400
+            
+            fecha_vencimiento = datetime.datetime.strptime(fecha_vencimiento_str, '%Y-%m-%d').date()
+            
+            cursor.execute("""
+                UPDATE agenda 
+                SET descripcion = %s, fecha_vencimiento = %s, link = %s, frecuencia = %s
+                WHERE id = %s
+            """, (descripcion, fecha_vencimiento, link, frecuencia, tarea_id))
+            
+            conn.commit()
+            return redirect(url_for('agenda'))
+    except Exception as e:
+        conn.rollback()
+        import traceback
+        return f"Error al editar la tarea: {e}<br><pre>{traceback.format_exc()}</pre>", 500
+    finally:
+        if conn:
+            conn.close()
+
+
 if __name__ == '__main__':
+
+
+
+
+
     app.run(host='0.0.0.0', debug=True)

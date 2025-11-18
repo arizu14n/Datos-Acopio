@@ -106,10 +106,10 @@ def sync_dbfs_to_postgres():
                     'acohis', 'acohis.dbf',
                     """CREATE TABLE IF NOT EXISTS acohis (
                         G_FECHA DATE, G_CTG VARCHAR(255), G_CODI VARCHAR(255), G_COSE VARCHAR(255), O_PESO NUMERIC, O_NETO NUMERIC,
-                        G_TARFLET NUMERIC, G_KILOMETR NUMERIC, G_CTAPLADE VARCHAR(255), G_CUILCHOF VARCHAR(255), G_CUITRAN VARCHAR(255), G_CTL VARCHAR(255)
+                        G_TARFLET NUMERIC, G_KILOMETR NUMERIC, G_CTAPLADE VARCHAR(255), G_CUILCHOF VARCHAR(255), G_CUITRAN VARCHAR(255), G_CTL VARCHAR(255), CLI_C VARCHAR(255)
                     );""",
-                    "INSERT INTO acohis VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                    ['G_FECHA', 'G_CTG', 'G_CODI', 'G_COSE', 'O_PESO', 'O_NETO', 'G_TARFLET', 'G_KILOMETR', 'G_CTAPLADE', 'G_CUILCHOF', 'G_CUITRAN', 'G_CTL']
+                    "INSERT INTO acohis VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    ['G_FECHA', 'G_CTG', 'G_CODI', 'G_COSE', 'O_PESO', 'O_NETO', 'G_TARFLET', 'G_KILOMETR', 'G_CTAPLADE', 'G_CUILCHOF', 'G_CUITRAN', 'G_CTL', 'CLI_C']
                 ),
                 (
                     'sysmae', 'sysmae.dbf',
@@ -138,13 +138,14 @@ def sync_dbfs_to_postgres():
             for table_name, dbf_filename, create_sql, insert_sql, columns in tables_to_sync:
                 print(f"\n--- Procesando tabla: {table_name} ---")
                 try:
-                    # 1. Crear tabla si no existe
-                    cursor.execute(create_sql)
-                    print(f"Tabla '{table_name}' creada o ya existente.")
+                    # 1. Dropear la tabla para asegurar que el esquema se actualice
+                    # Usamos sql.SQL para evitar inyección de SQL con nombres de tablas.
+                    cursor.execute(sql.SQL("DROP TABLE IF EXISTS {};").format(sql.Identifier(table_name)))
+                    print(f"Tabla '{table_name}' eliminada (si existía).")
 
-                    # 2. Truncar la tabla para empezar de cero
-                    cursor.execute(f"TRUNCATE TABLE {table_name};")
-                    print(f"Tabla '{table_name}' truncada.")
+                    # 2. Crear la tabla de nuevo
+                    cursor.execute(create_sql)
+                    print(f"Tabla '{table_name}' creada de nuevo.")
 
                     # 3. Leer el archivo DBF
                     dbf_path = os.path.join(DBF_PATH_PREFIX, dbf_filename)
@@ -201,6 +202,29 @@ def sync_dbfs_to_postgres():
                 fecha_solicitud DATE, nombre_persona VARCHAR(255), flete_id INTEGER REFERENCES fletes(id), codigo_cupo VARCHAR(255)
             );""")
             print("Tabla 'cupos_solicitados' creada o ya existente.")
+
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS agenda (
+                id SERIAL PRIMARY KEY,
+                descripcion TEXT NOT NULL,
+                fecha_vencimiento DATE NOT NULL,
+                link TEXT,
+                frecuencia VARCHAR(20),
+                completada BOOLEAN DEFAULT FALSE
+            );""")
+            print("Tabla 'agenda' creada o ya existente.")
+
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS passwords (
+                id SERIAL PRIMARY KEY,
+                titulo VARCHAR(255) NOT NULL,
+                descripcion TEXT,
+                link TEXT,
+                usuario VARCHAR(255),
+                contrasena VARCHAR(255),
+                vencimiento DATE
+            );""")
+            print("Tabla 'passwords' creada o ya existente.")
 
         conn.commit()
         print("\n¡Sincronización completada! Todos los cambios han sido guardados en la base de datos.")

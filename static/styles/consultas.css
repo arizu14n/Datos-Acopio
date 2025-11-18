@@ -49,3 +49,9 @@ tfoot .grand-total { background-color: #f2f2f2; }
 #cuit {
     max-width: 250px;
 }
+.table-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}

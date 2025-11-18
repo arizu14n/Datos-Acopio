@@ -53,15 +53,21 @@
             <h2><i class="fa-solid fa-cart-shopping"></i>Compras</h2>
             {% if compras_data %}
                 <table class="summary-table">
+                    <thead>
+                        <tr>
+                            <th>Grano</th>
+                            <th class="numeric">Kilos (TN)</th>
+                            <th class="numeric">Movimientos</th>
+                        </tr>
+                    </thead>
                     <tbody>
+                        {% for item in compras_data %}
                         <tr>
-                            <td>Monto Total</td>
-                            <td class="numeric">{{ format_number(compras_data.monto_total, is_currency=True) }}</td>
+                            <td>{{ item.grano }}</td>
+                            <td class="numeric">{{ format_number(item.kilos / 1000, decimals=2) }}</td>
+                            <td class="numeric">{{ item.movimientos }}</td>
                         </tr>
-                        <tr>
-                            <td>Cantidad de Compras</td>
-                            <td class="numeric">{{ compras_data.cantidad_compras }}</td>
-                        </tr>
+                        {% endfor %}
                     </tbody>
                 </table>
             {% else %}
@@ -120,6 +126,27 @@
                 </table>
             {% else %}
                 <p>No hay datos de cobranzas para el período seleccionado.</p>
+            {% endif %}
+        </div>
+    </a>
+    <a href="{{ url_for('agenda') }}" class="panel-link">
+        <div class="panel panel-agenda clickable">
+            <h2><i class="fa-solid fa-calendar-check"></i>Vencimientos Hoy</h2>
+            {% if vencimientos_hoy %}
+                <table class="summary-table">
+                    <tbody>
+                        <tr>
+                            <td>Pendientes</td>
+                            <td class="numeric">{{ vencimientos_hoy.pendientes }}</td>
+                        </tr>
+                        <tr>
+                            <td>Total para hoy</td>
+                            <td class="numeric">{{ vencimientos_hoy.total }}</td>
+                        </tr>
+                    </tbody>
+                </table>
+            {% else %}
+                <p>No hay vencimientos para hoy.</p>
             {% endif %}
         </div>
     </a>

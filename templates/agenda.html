@@ -1,0 +1,301 @@
+{% extends "base.html" %}
+{% block title %}Agenda de Vencimientos{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <h1 class="mt-4">Agenda de Vencimientos</h1>
+    <p>Gestión de tareas y vencimientos recurrentes.</p>
+
+    <!-- Formulario para Nueva Tarea -->
+    <div class="card mb-4">
+        <div class="card-header">
+            <i class="fas fa-plus"></i> Nueva Tarea
+        </div>
+        <div class="card-body">
+            <form method="POST" action="{{ url_for('agenda') }}">
+                <input type="hidden" name="action" value="add">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label for="descripcion">Descripción</label>
+                            <textarea class="form-control" id="descripcion" name="descripcion" rows="3" required></textarea>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label for="link">Hipervínculo (Opcional)</label>
+                            <input type="url" class="form-control" id="link" name="link" placeholder="https://ejemplo.com">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group mb-3">
+                            <label for="fecha_vencimiento">Fecha de Vencimiento</label>
+                            <input type="date" class="form-control" id="fecha_vencimiento" name="fecha_vencimiento" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group mb-3">
+                            <label for="frecuencia">Frecuencia de Renovación</label>
+                            <select class="form-control" id="frecuencia" name="frecuencia">
+                                <option value="unica">Única vez</option>
+                                <option value="diaria">Diaria</option>
+                                <option value="semanal">Semanal</option>
+                                <option value="mensual">Mensual</option>
+                                <option value="anual">Anual</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-primary">Agregar Tarea</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de Tareas Pendientes -->
+    <div class="card">
+        <div class="card-header">
+            <i class="fas fa-tasks"></i> Tareas Pendientes
+        </div>
+        <div class="card-body">
+            <div class="table-responsive">
+                <table class="table table-bordered" id="dataTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Descripción</th>
+                            <th>Fecha de Vencimiento</th>
+                            <th>Link</th>
+                            <th>Frecuencia</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tarea in tareas %}
+                        <tr>
+                            <td>{{ tarea.descripcion }}</td>
+                            <td>{{ format_date(tarea.fecha_vencimiento) }}</td>
+                            <td>
+                                {% if tarea.link %}
+                                    <a href="{{ tarea.link }}" target="_blank">Visitar</a>
+                                {% endif %}
+                            </td>
+                            <td>{{ tarea.frecuencia|capitalize }}</td>
+                            <td>
+                                <form method="POST" action="{{ url_for('agenda') }}" class="d-inline">
+                                    <input type="hidden" name="action" value="complete">
+                                    <input type="hidden" name="tarea_id" value="{{ tarea.id }}">
+                                    <button type="submit" class="btn btn-success btn-sm" title="Completar y Renovar si corresponde">
+                                        <i class="fas fa-check"></i>
+                                    </button>
+                                </form>
+                                <form method="POST" action="{{ url_for('agenda') }}" class="d-inline">
+                                    <input type="hidden" name="action" value="delete">
+                                    <input type="hidden" name="tarea_id" value="{{ tarea.id }}">
+                                    <button type="submit" class="btn btn-danger btn-sm" title="Eliminar" onclick="return confirm('¿Estás seguro de que quieres eliminar esta tarea?');">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                                <!-- Botón de Editar (funcionalidad futura) -->
+                                <button class="btn btn-warning btn-sm edit-tarea-btn" title="Editar" data-id="{{ tarea.id }}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="text-center">No hay tareas pendientes.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gestor de Contraseñas -->
+    <div class="card mt-5">
+        <div class="card-header">
+            <i class="fas fa-key"></i> Gestor de Contraseñas
+        </div>
+        <div class="card-body">
+            <!-- Formulario para Nueva Contraseña -->
+            <h5 class="mb-3">Agregar Nueva Contraseña</h5>
+            <form method="POST" action="{{ url_for('agenda') }}" class="mb-4">
+                <input type="hidden" name="action" value="add_password">
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="pass_titulo">Título</label>
+                        <input type="text" class="form-control" id="pass_titulo" name="titulo" required>
+                    </div>
+                    <div class="col-md-8 mb-3">
+                        <label for="pass_descripcion">Descripción</label>
+                        <input type="text" class="form-control" id="pass_descripcion" name="descripcion">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="pass_link">Link</label>
+                        <input type="url" class="form-control" id="pass_link" name="link" placeholder="https://ejemplo.com">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="pass_usuario">Usuario</label>
+                        <input type="text" class="form-control" id="pass_usuario" name="usuario">
+                    </div>
+                    <div class="col-md-4 mb-3">
+                        <label for="pass_contrasena">Contraseña</label>
+                        <input type="password" class="form-control" id="pass_contrasena" name="contrasena">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4 mb-3">
+                        <label for="pass_vencimiento">Vencimiento (Aprox)</label>
+                        <input type="date" class="form-control" id="pass_vencimiento" name="vencimiento">
+                    </div>
+                </div>
+                <button type="submit" class="btn btn-info text-white">Agregar Contraseña</button>
+            </form>
+
+            <hr>
+
+            <!-- Tabla de Contraseñas -->
+            <h5 class="mt-4">Contraseñas Guardadas</h5>
+            <div class="table-responsive">
+                <table class="table table-bordered" id="passwordTable" width="100%" cellspacing="0">
+                    <thead>
+                        <tr>
+                            <th>Título</th>
+                            <th>Descripción</th>
+                            <th>Link</th>
+                            <th>Usuario</th>
+                            <th>Contraseña</th>
+                            <th>Vencimiento</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for p in passwords %}
+                        <tr>
+                            <td>{{ p.titulo }}</td>
+                            <td>{{ p.descripcion }}</td>
+                            <td>
+                                {% if p.link %}
+                                    <a href="{{ p.link }}" target="_blank">Visitar</a>
+                                {% endif %}
+                            </td>
+                            <td>{{ p.usuario }}</td>
+                            <td>
+                                <span class="password-hidden">********</span>
+                                <span class="password-revealed" style="display: none;">{{ p.contrasena }}</span>
+                            </td>
+                            <td>{{ format_date(p.vencimiento) if p.vencimiento else '' }}</td>
+                            <td>
+                                <button class="btn btn-secondary btn-sm toggle-password" title="Mostrar/Ocultar">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                                <form method="POST" action="{{ url_for('agenda') }}" class="d-inline">
+                                    <input type="hidden" name="action" value="delete_password">
+                                    <input type="hidden" name="password_id" value="{{ p.id }}">
+                                    <button type="submit" class="btn btn-danger btn-sm" title="Eliminar" onclick="return confirm('¿Estás seguro de que quieres eliminar esta contraseña?');">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="text-center">No hay contraseñas guardadas.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Task Modal -->
+    <div class="modal fade" id="editTareaModal" tabindex="-1" aria-labelledby="editTareaModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="editTareaModalLabel">Editar Tarea</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <form id="editTareaForm" method="POST">
+                <input type="hidden" name="action" value="edit">
+                <input type="hidden" id="edit_tarea_id" name="tarea_id">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label for="edit_descripcion">Descripción</label>
+                            <textarea class="form-control" id="edit_descripcion" name="descripcion" rows="3" required></textarea>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="form-group mb-3">
+                            <label for="edit_link">Hipervínculo (Opcional)</label>
+                            <input type="url" class="form-control" id="edit_link" name="link" placeholder="https://ejemplo.com">
+                        </div>
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="form-group mb-3">
+                            <label for="edit_fecha_vencimiento">Fecha de Vencimiento</label>
+                            <input type="date" class="form-control" id="edit_fecha_vencimiento" name="fecha_vencimiento" required>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="form-group mb-3">
+                            <label for="edit_frecuencia">Frecuencia de Renovación</label>
+                            <select class="form-control" id="edit_frecuencia" name="frecuencia">
+                                <option value="unica">Única vez</option>
+                                <option value="diaria">Diaria</option>
+                                <option value="semanal">Semanal</option>
+                                <option value="mensual">Mensual</option>
+                                <option value="anual">Anual</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+            <button type="submit" form="editTareaForm" class="btn btn-primary">Guardar Cambios</button>
+          </div>
+        </div>
+      </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/agenda.js') }}"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const passwordButtons = document.querySelectorAll('.toggle-password');
+    passwordButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const row = this.closest('tr');
+            const hiddenPass = row.querySelector('.password-hidden');
+            const revealedPass = row.querySelector('.password-revealed');
+            const icon = this.querySelector('i');
+
+            if (hiddenPass.style.display !== 'none') {
+                hiddenPass.style.display = 'none';
+                revealedPass.style.display = 'inline';
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            } else {
+                hiddenPass.style.display = 'inline';
+                revealedPass.style.display = 'none';
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            }
+        });
+    });
+});
+</script>
+{% endblock %}
