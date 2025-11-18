@@ -2186,708 +2186,112 @@ def export_compras_pdf():
 
 
 @app.route('/agenda', methods=['GET', 'POST'])
-
-
-
-
-
-@app.route('/agenda', methods=['GET', 'POST'])
 def agenda():
-
-
-
-
-
     conn = get_db()
-
-
-
-
-
     if not conn:
-
-
-
-
-
         return "<h1>Error: No se pudo conectar a la base de datos.</h1>"
 
-
-
-
-
-
-
-
-
-
-
     try:
-
-
-
-
-
         with get_dict_cursor(conn) as cursor:
-
-
-
-
+            today = datetime.date.today() # Define today here
 
             if request.method == 'POST':
-
-
-
-
-
                 action = request.form.get('action')
 
-
-
-
-
-                today = datetime.date.today()
-
-
-
-
-
-
-
-
-
-
-
                 if action == 'add':
-
-
-
-
-
                     descripcion = request.form.get('descripcion')
-
-
-
-
-
                     fecha_vencimiento_str = request.form.get('fecha_vencimiento')
-
-
-
-
-
                     link = request.form.get('link')
-
-
-
-
-
                     frecuencia = request.form.get('frecuencia')
-
-
-
-
-
                     
-
-
-
-
-
                     fecha_vencimiento = datetime.datetime.strptime(fecha_vencimiento_str, '%Y-%m-%d').date()
 
-
-
-
-
-
-
-
-
-
-
                     if fecha_vencimiento < today:
-
-
-
-
-
                         # Aquí podrías pasar un mensaje de error a la plantilla
-
-
-
-
-
                         print("Error: No se puede agendar una tarea con fecha vencida.")
-
-
-
-
-
                     else:
-
-
-
-
-
                         cursor.execute(
-
-
-
-
-
                             """INSERT INTO agenda (descripcion, fecha_vencimiento, link, frecuencia, completada)
-
-
-
-
-
                                VALUES (%s, %s, %s, %s, %s)""",
-
-
-
-
-
                             (descripcion, fecha_vencimiento, link, frecuencia, False)
-
-
-
-
-
                         )
-
-
-
-
-
                         conn.commit()
-
-
-
-
-
-
-
-
-
-
 
                 elif action == 'complete':
-
-
-
-
-
                     tarea_id = request.form.get('tarea_id')
-
-
-
-
-
                     cursor.execute("SELECT * FROM agenda WHERE id = %s", (tarea_id,))
-
-
-
-
-
                     tarea = cursor.fetchone()
 
-
-
-
-
-
-
-
-
-
-
                     if tarea:
-
-
-
-
-
                         # Marcar la tarea actual como completada
-
-
-
-
-
                         cursor.execute("UPDATE agenda SET completada = TRUE WHERE id = %s", (tarea_id,))
 
-
-
-
-
-
-
-
-
-
-
                         # Si es recurrente, crear la nueva tarea
-
-
-
-
-
                         if tarea['frecuencia'] != 'unica':
-
-
-
-
-
                             nueva_fecha = None
-
-
-
-
-
                             if tarea['frecuencia'] == 'diaria':
-
-
-
-
-
                                 nueva_fecha = tarea['fecha_vencimiento'] + relativedelta(days=1)
-
-
-
-
-
                             elif tarea['frecuencia'] == 'semanal':
-
-
-
-
-
                                 nueva_fecha = tarea['fecha_vencimiento'] + relativedelta(weeks=1)
-
-
-
-
-
                             elif tarea['frecuencia'] == 'mensual':
-
-
-
-
-
                                 nueva_fecha = tarea['fecha_vencimiento'] + relativedelta(months=1)
-
-
-
-
-
                             elif tarea['frecuencia'] == 'anual':
-
-
-
-
-
                                 nueva_fecha = tarea['fecha_vencimiento'] + relativedelta(years=1)
-
-
-
-
-
                             
-
-
-
-
-
                             # Si la nueva fecha calculada ya pasó, la movemos a hoy.
-
-
-
-
-
                             if nueva_fecha and nueva_fecha < today:
-
-
-
-
-
                                 nueva_fecha = today
 
-
-
-
-
-
-
-
-
-
-
                             if nueva_fecha:
-
-
-
-
-
                                 cursor.execute(
-
-
-
-
-
                                     """INSERT INTO agenda (descripcion, fecha_vencimiento, link, frecuencia, completada)
-
-
-
-
-
                                        VALUES (%s, %s, %s, %s, %s)""",
-
-
-
-
-
                                     (tarea['descripcion'], nueva_fecha, tarea['link'], tarea['frecuencia'], False)
-
-
-
-
-
                                 )
-
-
-
-
-
                         conn.commit()
-
-
-
-
-
                 
-
-
-
-
-
                 elif action == 'delete':
-
-
-
-
-
                     tarea_id = request.form.get('tarea_id')
-
-
-
-
-
                     cursor.execute("DELETE FROM agenda WHERE id = %s", (tarea_id,))
-
-
-
-
-
                     conn.commit()
-
-
-
-
-
-
-
-
-
-
 
                 elif action == 'add_password':
-
-
-
-
-
                     titulo = request.form.get('titulo')
-
-
-
-
-
                     descripcion = request.form.get('descripcion')
-
-
-
-
-
                     link = request.form.get('link')
-
-
-
-
-
                     usuario = request.form.get('usuario')
-
-
-
-
-
                     contrasena = request.form.get('contrasena')
-
-
-
-
-
                     vencimiento_str = request.form.get('vencimiento')
-
-
-
-
-
                     vencimiento = None
-
-
-
-
-
                     if vencimiento_str:
-
-
-
-
-
                         vencimiento = datetime.datetime.strptime(vencimiento_str, '%Y-%m-%d').date()
-
-
-
-
-
                     
-
-
-
-
-
                     cursor.execute(
-
-
-
-
-
                         """INSERT INTO passwords (titulo, descripcion, link, usuario, contrasena, vencimiento)
-
-
-
-
-
                            VALUES (%s, %s, %s, %s, %s, %s)""",
-
-
-
-
-
                         (titulo, descripcion, link, usuario, contrasena, vencimiento)
-
-
-
-
-
                     )
-
-
-
-
-
                     conn.commit()
-
-
-
-
-
-
-
-
-
-
 
                 elif action == 'delete_password':
-
-
-
-
-
                     password_id = request.form.get('password_id')
-
-
-
-
-
                     cursor.execute("DELETE FROM passwords WHERE id = %s", (password_id,))
-
-
-
-
-
                     conn.commit()
-
-
-
-
-
                     return redirect(url_for('agenda'))
-
-
-
-
-
-
-
-
-
-
-
-                
-
-
-
-
-
-
-
-
-
-
-
-                
-
-
-
-
-
-
-
-
-
-
-
-                
-
-
-
-
-
-
-
-
-
-
-
-                
-
-
-
-
-
-
-
-
-
-
-
-                
-
-
-
-
-
-
-
-
-
-
-
-                
-
-
-
-
-
-            cursor.execute("SELECT * FROM agenda WHERE completada = FALSE ORDER BY fecha_vencimiento ASC")
-
-
-
-
-
-            tareas = cursor.fetchall()
-
-
-
-
-
             
-
-
-
-
-
+            cursor.execute("SELECT * FROM agenda WHERE completada = FALSE ORDER BY fecha_vencimiento ASC")
+            tareas = cursor.fetchall()
+            
             cursor.execute("SELECT * FROM passwords ORDER BY titulo ASC")
-
-
-
-
-
             passwords = cursor.fetchall()
 
-
-
-
-
-
-
-
-
-
-
-            return render_template('agenda.html', tareas=tareas, passwords=passwords)
-
-
-
-
-
-
-
-
-
-
+            return render_template('agenda.html', tareas=tareas, passwords=passwords, today_date=today)
 
     except Exception as e:
-
-
-
-
-
         import traceback
-
-
-
-
-
         return f"<h1>Ocurrió un error en la Agenda: {e}</h1><pre>{traceback.format_exc()}</pre>"
-
-
-
-
-
     finally:
-
-
-
-
-
         if conn:
-
-
-
-
-
             conn.close()
 
 

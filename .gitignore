@@ -211,3 +211,6 @@ fletes.db
 =======
 __marimo__/fletes.db 
 >>>>>>> 1364bc51262b3f73da3d506e1e770dce67ac05de
+function confirmarArriboCPE_AFIP().txt
+.gitignore
+WebMethod() ConformarArriboCPE.txt

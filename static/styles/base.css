@@ -44,3 +44,11 @@ body {
     margin-bottom: 30px;
     overflow-x: auto; /* Para tablas anchas */
 }
+
+#dataTable tbody tr.overdue-task {
+    background-color: #ffe0b2 !important; /* Light orange/peach */
+}
+
+#dataTable tbody tr.overdue-task td {
+    background-color: #ffe0b2 !important; /* Ensure cells also get the background color */
+}

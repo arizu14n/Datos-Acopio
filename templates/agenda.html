@@ -72,7 +72,7 @@
                     </thead>
                     <tbody>
                         {% for tarea in tareas %}
-                        <tr>
+                                        <tr class="{% if tarea.fecha_vencimiento < today_date %}overdue-task{% endif %}">
                             <td>{{ tarea.descripcion }}</td>
                             <td>{{ format_date(tarea.fecha_vencimiento) }}</td>
                             <td>
