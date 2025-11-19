@@ -30,6 +30,18 @@
                     {% if nombre_chofer %}
                         <span class="form-control" style="background-color: #eee;">{{ nombre_chofer }}</span>
                     {% endif %}
+                </div>
+            </div>
+
+            <div class="filter-group">
+                <label for="categoria">Categoría</label>
+                <div class="filter-group-row">
+                    <select id="categoria" name="categoria" class="form-control">
+                        <option value="">Todas</option>
+                        {% for categoria in categorias %}
+                            <option value="{{ categoria }}" {% if filtros_aplicados.categoria == categoria %}selected{% endif %}>{{ categoria }}</option>
+                        {% endfor %}
+                    </select>
                     <button type="submit" class="btn btn-primary">Filtrar</button>
                     <a href="{{ url_for('fletes') }}" class="btn btn-warning">Reiniciar</a>
                     <a href="{{ url_for('importar_fletes_route') }}" class="btn btn-success">Importar Fletes desde DBF</a>

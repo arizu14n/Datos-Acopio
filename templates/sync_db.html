@@ -1,0 +1,98 @@
+{% extends 'base.html' %}
+
+{% block title %}Sincronizar Base de Datos{% endblock %}
+
+{% block head_extra %}
+    <style>
+        .sync-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            text-align: center;
+        }
+        #sync-button {
+            font-size: 1.2rem;
+            padding: 0.8rem 1.5rem;
+            margin-bottom: 1rem;
+        }
+        #sync-status {
+            margin-top: 1rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+        }
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #09f;
+            animation: spin 1s ease infinite;
+            display: none; /* Oculto por defecto */
+            margin-bottom: 1rem;
+        }
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+    </style>
+{% endblock %}
+
+{% block content %}
+<div class="sync-container">
+    <h1>Sincronizar Base de Datos</h1>
+    <p>Presiona el botón para iniciar la sincronización de las tablas DBF a las tablas espejo en PostgreSQL.</p>
+    <p>Este proceso puede tardar unos minutos.</p>
+    
+    <button id="sync-button" class="btn btn-primary">Iniciar Sincronización</button>
+    
+    <div id="spinner" class="spinner"></div>
+    <div id="sync-status"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('sync-button').addEventListener('click', function() {
+    const syncButton = this;
+    const spinner = document.getElementById('spinner');
+    const statusDiv = document.getElementById('sync-status');
+
+    // Deshabilitar botón y mostrar spinner
+    syncButton.disabled = true;
+    syncButton.textContent = 'Sincronizando...';
+    spinner.style.display = 'block';
+    statusDiv.textContent = '';
+    statusDiv.className = '';
+
+    fetch('{{ url_for("sync_db") }}', {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.status === 'success') {
+            statusDiv.textContent = '¡Sincronización completada exitosamente!';
+            statusDiv.classList.add('alert', 'alert-success');
+        } else {
+            statusDiv.textContent = 'Error en la sincronización: ' + data.message;
+            statusDiv.classList.add('alert', 'alert-danger');
+        }
+    })
+    .catch(error => {
+        statusDiv.textContent = 'Error de red o del servidor: ' + error;
+        statusDiv.classList.add('alert', 'alert-danger');
+    })
+    .finally(() => {
+        // Rehabilitar botón y ocultar spinner
+        syncButton.disabled = false;
+        syncButton.textContent = 'Iniciar Sincronización';
+        spinner.style.display = 'none';
+    });
+});
+</script>
+{% endblock %}

@@ -1,6 +1,7 @@
 # app.py
 
 from flask import Flask, render_template, request, Response, redirect, url_for, jsonify
+import subprocess
 from dbfread import DBF
 from collections import OrderedDict
 from fpdf import FPDF
@@ -11,6 +12,7 @@ from decimal import Decimal
 import math
 import requests
 from bs4 import BeautifulSoup
+import sys
 import psycopg2
 from psycopg2.extras import DictCursor
 from dateutil.relativedelta import relativedelta
@@ -51,6 +53,36 @@ def get_db():
 def get_dict_cursor(conn):
     """Devuelve un cursor que devuelve diccionarios."""
     return conn.cursor(cursor_factory=DictCursor)
+
+@app.route('/sync-db', methods=['POST'])
+def sync_db():
+    """
+    Endpoint para ejecutar el script de sincronización de la base de datos.
+    """
+    try:
+        # Ruta al ejecutable de Python en el entorno virtual
+        python_executable = sys.executable
+        
+        # Ejecuta el script sync_db.py usando el mismo intérprete de Python
+        # que está corriendo la aplicación Flask.
+        result = subprocess.run(
+            [python_executable, 'sync_db.py'],
+            capture_output=True,
+            text=True,
+            check=True  # Lanza una excepción si el script devuelve un error
+        )
+        
+        print(result.stdout) # Muestra la salida del script en la consola del servidor
+        return jsonify({'status': 'success', 'message': 'Sincronización completada exitosamente.'})
+
+    except subprocess.CalledProcessError as e:
+        # Si el script falla, captura el error
+        print(f"Error durante la sincronización: {e.stderr}")
+        return jsonify({'status': 'error', 'message': f'Error durante la sincronización: {e.stderr}'}), 500
+    except Exception as e:
+        # Otros errores inesperados
+        print(f"Error inesperado: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Ocurrió un error inesperado: {str(e)}'}), 500
 
 
 
@@ -164,6 +196,10 @@ class PDF(FPDF):
                 self.cell(col_width, 10, totals['sums']['Otros'], 1, 0, 'L')
                 self.cell(col_width, 10, totals['sums']['Total'], 1, 0, 'L')
             self.ln()
+
+@app.route('/sync-db-page')
+def sync_db_page():
+    return render_template('sync_db.html')
 
 @app.route('/')
 def home():
@@ -1542,6 +1578,7 @@ def fletes():
         granos_map = {}
         sorted_all_choferes = OrderedDict()
         unique_localidades = OrderedDict()
+        categorias = []
         
         conn = get_db()
         if not conn:
@@ -1565,17 +1602,25 @@ def fletes():
                 cursor.execute("SELECT c_document, c_nombre FROM choferes")
                 choferes_map = {rec['c_document'].strip(): rec['c_nombre'].strip() for rec in cursor.fetchall() if rec.get('c_document') and rec.get('c_nombre')}
 
+                # --- Obtener Categorías para el filtro ---
+                cursor.execute("SELECT DISTINCT categoria FROM fletes WHERE categoria IS NOT NULL AND categoria != ''")
+                categorias_db = [row['categoria'] for row in cursor.fetchall()]
+                # Añadir las categorías hardcoded y asegurarse de que sean únicas
+                categorias = sorted(list(set(categorias_db + ['ROSARIO', 'ARRIMES'])))
+
                 # --- Filtros ---
                 if request.method == 'POST':
                     filtros_aplicados['chofer'] = request.form.get('chofer')
                     filtros_aplicados['fecha_desde'] = request.form.get('fecha_desde')
                     filtros_aplicados['fecha_hasta'] = request.form.get('fecha_hasta')
+                    filtros_aplicados['categoria'] = request.form.get('categoria')
                 else: # GET
                     today = datetime.date.today()
                     first_day_of_month = today.replace(day=1)
                     filtros_aplicados['fecha_desde'] = first_day_of_month.strftime('%Y-%m-%d')
                     filtros_aplicados['fecha_hasta'] = today.strftime('%Y-%m-%d')
                     filtros_aplicados['chofer'] = None
+                    filtros_aplicados['categoria'] = None
                 
                 query = "SELECT * FROM fletes WHERE 1=1"
                 params = []
@@ -1589,6 +1634,17 @@ def fletes():
                 if filtros_aplicados.get('fecha_hasta'):
                     query += " AND g_fecha <= %s"
                     params.append(filtros_aplicados['fecha_hasta'])
+                
+                # Añadir filtro de categoría
+                categoria_filtro = filtros_aplicados.get('categoria')
+                if categoria_filtro:
+                    if categoria_filtro == 'ROSARIO':
+                        query += " AND (categoria = 'ROSARIO' OR g_ctg LIKE '102%')"
+                    elif categoria_filtro == 'ARRIMES':
+                        query += " AND (categoria = 'ARRIMES' OR g_ctg LIKE '101%')"
+                    else:
+                        query += " AND categoria = %s"
+                        params.append(categoria_filtro)
                 
                 query += " ORDER BY g_fecha DESC"
                 cursor.execute(query, params)
@@ -1667,7 +1723,8 @@ def fletes():
                                totales=totales,
                                granos=granos_map,
                                all_choferes=sorted_all_choferes,
-                               localidades=unique_localidades)
+                               localidades=unique_localidades,
+                               categorias=categorias)
 
     except Exception as e:
         import traceback
