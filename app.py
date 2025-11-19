@@ -1606,7 +1606,7 @@ def fletes():
                 cursor.execute("SELECT DISTINCT categoria FROM fletes WHERE categoria IS NOT NULL AND categoria != ''")
                 categorias_db = [row['categoria'] for row in cursor.fetchall()]
                 # Añadir las categorías hardcoded y asegurarse de que sean únicas
-                categorias = sorted(list(set(categorias_db + ['ROSARIO', 'ARRIMES'])))
+                categorias = sorted(list(set(categorias_db + ['ROSARIO', 'ARRIMES', 'HARINA - OTROS'])))
 
                 # --- Filtros ---
                 if request.method == 'POST':
@@ -1639,9 +1639,13 @@ def fletes():
                 categoria_filtro = filtros_aplicados.get('categoria')
                 if categoria_filtro:
                     if categoria_filtro == 'ROSARIO':
-                        query += " AND (categoria = 'ROSARIO' OR g_ctg LIKE '102%')"
+                        query += " AND (categoria = %s OR g_ctg LIKE %s)"
+                        params.append('ROSARIO')
+                        params.append('102%')
                     elif categoria_filtro == 'ARRIMES':
-                        query += " AND (categoria = 'ARRIMES' OR g_ctg LIKE '101%')"
+                        query += " AND (categoria = %s OR g_ctg LIKE %s)"
+                        params.append('ARRIMES')
+                        params.append('101%')
                     else:
                         query += " AND categoria = %s"
                         params.append(categoria_filtro)

@@ -156,9 +156,9 @@
                         <label for="categoria" class="form-label">Categoría</label>
                         <select class="form-select" id="categoria" name="categoria">
                             <option selected disabled value="">Seleccionar...</option>
-                            <option value="ROSARIO">ROSARIO</option>
-                            <option value="HARINA - OTROS">HARINA - OTROS</option>
-                            <option value="ARRIMES">ARRIMES</option>
+                            {% for cat in categorias %}
+                            <option value="{{ cat }}">{{ cat }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                 </div>
