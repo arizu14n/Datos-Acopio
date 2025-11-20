@@ -2085,7 +2085,9 @@ def combustible():
                 proveedor_id = request.form.get('proveedor_id') if request.form.get('proveedor_id') else None
                 chofer_documento = request.form.get('chofer_documento')
                 nro_comprobante = request.form.get('nro_comprobante')
-                
+                fecha_movimiento_str = request.form.get('fecha_movimiento') # Get the manual date
+                fecha_movimiento = datetime.datetime.strptime(fecha_movimiento_str, '%Y-%m-%d') if fecha_movimiento_str else datetime.datetime.now()
+
                 # Asegurarse que el precio unitario sea None si está vacío
                 def clean_price(price_str):
                     if price_str is None or price_str.strip() == '':
@@ -2104,16 +2106,16 @@ def combustible():
                     
                     # Insertar salida
                     cursor.execute("""
-                        INSERT INTO combustible_movimientos (proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
-                    """, (proveedor_id, chofer_documento, 'Canje - Salida', nro_comprobante, producto_sale_id, -abs(cantidad_sale), None))
+                        INSERT INTO combustible_movimientos (fecha, proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
+                    """, (fecha_movimiento, proveedor_id, chofer_documento, 'Canje - Salida', nro_comprobante, producto_sale_id, -abs(cantidad_sale), None))
                     id_salida = cursor.fetchone()[0]
 
                     # Insertar entrada
                     cursor.execute("""
-                        INSERT INTO combustible_movimientos (proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario, id_transaccion_canje)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                    """, (proveedor_id, chofer_documento, 'Canje - Entrada', nro_comprobante, producto_entra_id, abs(cantidad_entra), precio_unitario, id_salida))
+                        INSERT INTO combustible_movimientos (fecha, proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario, id_transaccion_canje)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (fecha_movimiento, proveedor_id, chofer_documento, 'Canje - Entrada', nro_comprobante, producto_entra_id, abs(cantidad_entra), precio_unitario, id_salida))
                     
                 else: # Compra o Retiro
                     producto_id = request.form.get('producto_id')
@@ -2124,9 +2126,9 @@ def combustible():
                         cantidad = -abs(cantidad)
 
                     cursor.execute("""
-                        INSERT INTO combustible_movimientos (proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
-                    """, (proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario))
+                        INSERT INTO combustible_movimientos (fecha, proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (fecha_movimiento, proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario))
 
                 conn.commit()
                 return redirect(url_for('combustible'))
@@ -2186,12 +2188,15 @@ def combustible():
             """)
             stock = cursor.fetchall()
 
+            today_date = datetime.date.today().strftime('%Y-%m-%d') # Get today's date for the template
+
             return render_template('combustible.html', 
                                    movimientos=movimientos,
                                    proveedores=proveedores,
                                    productos=productos,
                                    choferes=choferes,
-                                   stock=stock)
+                                   stock=stock,
+                                   today_date=today_date) # Pass today_date to the template
     except Exception as e:
         conn.rollback()
         import traceback
@@ -2578,6 +2583,106 @@ def edit_tarea(tarea_id):
         conn.rollback()
         import traceback
         return f"Error al editar la tarea: {e}<br><pre>{traceback.format_exc()}</pre>", 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/combustible/get/<int:movement_id>', methods=['GET'])
+def get_combustible_movement(movement_id):
+    conn = get_db()
+    if not conn:
+        return jsonify({'error': 'No se pudo conectar a la base de datos.'}), 500
+    try:
+        with get_dict_cursor(conn) as cursor:
+            cursor.execute('SELECT * FROM combustible_movimientos WHERE id = %s', (movement_id,))
+            movement = cursor.fetchone()
+            if movement is None:
+                return jsonify({'error': 'Movimiento no encontrado.'}), 404
+            
+            movement_dict = dict(movement)
+            # Convert datetime object to string for JSON serialization
+            if isinstance(movement_dict.get('fecha'), datetime.datetime):
+                movement_dict['fecha'] = movement_dict['fecha'].isoformat()
+            
+            # Convert Decimal to float for JSON serialization
+            if isinstance(movement_dict.get('cantidad'), Decimal):
+                movement_dict['cantidad'] = float(movement_dict['cantidad'])
+            if isinstance(movement_dict.get('precio_unitario'), Decimal):
+                movement_dict['precio_unitario'] = float(movement_dict['precio_unitario'])
+
+            return jsonify(movement_dict)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/combustible/edit/<int:movement_id>', methods=['POST'])
+def edit_combustible_movement(movement_id):
+    conn = get_db()
+    if not conn:
+        return jsonify({'success': False, 'error': 'No se pudo conectar a la base de datos.'}), 500
+    try:
+        with get_dict_cursor(conn) as cursor:
+            fecha_movimiento_str = request.form.get('fecha_movimiento')
+            fecha_movimiento = datetime.datetime.strptime(fecha_movimiento_str, '%Y-%m-%d') if fecha_movimiento_str else None
+            proveedor_id = request.form.get('proveedor_id') if request.form.get('proveedor_id') else None
+            chofer_documento = request.form.get('chofer_documento')
+            nro_comprobante = request.form.get('nro_comprobante')
+            producto_id = request.form.get('producto_id')
+            cantidad = Decimal(request.form.get('cantidad', 0))
+            precio_unitario_str = request.form.get('precio_unitario')
+
+            def clean_price(price_str):
+                if price_str is None or price_str.strip() == '':
+                    return None
+                try:
+                    return Decimal(price_str)
+                except:
+                    return None
+            precio_unitario = clean_price(precio_unitario_str)
+
+            cursor.execute("""
+                UPDATE combustible_movimientos
+                SET fecha = %s, proveedor_id = %s, chofer_documento = %s, nro_comprobante = %s,
+                    producto_id = %s, cantidad = %s, precio_unitario = %s
+                WHERE id = %s
+            """, (fecha_movimiento, proveedor_id, chofer_documento, nro_comprobante,
+                  producto_id, cantidad, precio_unitario, movement_id))
+            conn.commit()
+            return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/combustible/delete/<int:movement_id>', methods=['POST'])
+def delete_combustible_movement(movement_id):
+    conn = get_db()
+    if not conn:
+        return jsonify({'success': False, 'error': 'No se pudo conectar a la base de datos.'}), 500
+    try:
+        with get_dict_cursor(conn) as cursor:
+            # Check if this movement is part of a 'Canje' transaction
+            cursor.execute("SELECT id_transaccion_canje, tipo_operacion FROM combustible_movimientos WHERE id = %s", (movement_id,))
+            movement_info = cursor.fetchone()
+
+            if movement_info and movement_info['tipo_operacion'].startswith('Canje'):
+                if movement_info['tipo_operacion'] == 'Canje - Salida':
+                    # If it's a 'Canje - Salida', delete the corresponding 'Canje - Entrada'
+                    cursor.execute("DELETE FROM combustible_movimientos WHERE id_transaccion_canje = %s", (movement_id,))
+                elif movement_info['tipo_operacion'] == 'Canje - Entrada':
+                    # If it's a 'Canje - Entrada', find the 'Canje - Salida' and delete it too
+                    cursor.execute("DELETE FROM combustible_movimientos WHERE id = %s", (movement_info['id_transaccion_canje'],))
+            
+            cursor.execute("DELETE FROM combustible_movimientos WHERE id = %s", (movement_id,))
+            conn.commit()
+            return jsonify({'success': True})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         if conn:
             conn.close()

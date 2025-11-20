@@ -113,9 +113,9 @@ def sync_dbfs_to_postgres():
                 ),
                 (
                     'sysmae', 'sysmae.dbf',
-                    "CREATE TABLE IF NOT EXISTS sysmae (CLI_C VARCHAR(255) PRIMARY KEY, S_APELLI VARCHAR(255), S_LOCALI VARCHAR(255));",
-                    "INSERT INTO sysmae (CLI_C, S_APELLI, S_LOCALI) VALUES (%s, %s, %s) ON CONFLICT (CLI_C) DO NOTHING",
-                    ['CLI_C', 'S_APELLI', 'S_LOCALI']
+                    "CREATE TABLE IF NOT EXISTS sysmae (CLI_C VARCHAR(255) PRIMARY KEY, S_APELLI VARCHAR(255), S_LOCALI VARCHAR(255), S_ZONACU VARCHAR(255));",
+                    "INSERT INTO sysmae (CLI_C, S_APELLI, S_LOCALI, S_ZONACU) VALUES (%s, %s, %s, %s) ON CONFLICT (CLI_C) DO NOTHING",
+                    ['CLI_C', 'S_APELLI', 'S_LOCALI', 'S_ZONACU']
                 ),
                 (
                     'choferes', 'choferes.dbf',
@@ -140,8 +140,12 @@ def sync_dbfs_to_postgres():
                 try:
                     # 1. Dropear la tabla para asegurar que el esquema se actualice
                     # Usamos sql.SQL para evitar inyección de SQL con nombres de tablas.
-                    cursor.execute(sql.SQL("DROP TABLE IF EXISTS {};").format(sql.Identifier(table_name)))
-                    print(f"Tabla '{table_name}' eliminada (si existía).")
+                    if table_name == 'choferes': # Add CASCADE for choferes
+                        cursor.execute(sql.SQL("DROP TABLE IF EXISTS {} CASCADE;").format(sql.Identifier(table_name)))
+                        print(f"Tabla '{table_name}' eliminada (si existía) con CASCADE.")
+                    else:
+                        cursor.execute(sql.SQL("DROP TABLE IF EXISTS {};").format(sql.Identifier(table_name)))
+                        print(f"Tabla '{table_name}' eliminada (si existía).")
 
                     # 2. Crear la tabla de nuevo
                     cursor.execute(create_sql)
@@ -227,6 +231,8 @@ def sync_dbfs_to_postgres():
             print("Tabla 'passwords' creada o ya existente.")
 
             # --- Tablas para Gestión de Combustible ---
+            cursor.execute("""DROP TABLE IF EXISTS combustible_proveedores CASCADE;""")
+            print("Tabla 'combustible_proveedores' eliminada (si existía).")
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS combustible_proveedores (
                 id SERIAL PRIMARY KEY,
@@ -234,6 +240,8 @@ def sync_dbfs_to_postgres():
             );""")
             print("Tabla 'combustible_proveedores' creada o ya existente.")
 
+            cursor.execute("""DROP TABLE IF EXISTS combustible_productos CASCADE;""")
+            print("Tabla 'combustible_productos' eliminada (si existía).")
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS combustible_productos (
                 id SERIAL PRIMARY KEY,
@@ -241,11 +249,13 @@ def sync_dbfs_to_postgres():
             );""")
             print("Tabla 'combustible_productos' creada o ya existente.")
 
+            cursor.execute("""DROP TABLE IF EXISTS combustible_movimientos CASCADE;""")
+            print("Tabla 'combustible_movimientos' eliminada (si existía).")
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS combustible_movimientos (
                 id SERIAL PRIMARY KEY,
                 fecha TIMESTAMP WITHOUT TIME ZONE DEFAULT (NOW() AT TIME ZONE 'UTC'),
-                proveedor_id INTEGER REFERENCES combustible_proveedores(id),
+                proveedor_id VARCHAR(255),
                 chofer_documento VARCHAR(255) REFERENCES choferes(c_document),
                 tipo_operacion VARCHAR(50) NOT NULL,
                 nro_comprobante VARCHAR(255),

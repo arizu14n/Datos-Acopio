@@ -49,8 +49,8 @@
         </div>
         <div class="card-body">
             <form action="{{ url_for('combustible') }}" method="POST" id="form-combustible">
-                <div class="row g-3">
-                    <div class="col-md-3">
+                <div class="row g-3 mt-2">
+                    <div class="col-md-2">
                         <label for="tipo_operacion" class="form-label">Tipo de Operación</label>
                         <select class="form-select" id="tipo_operacion" name="tipo_operacion" required>
                             <option value="Compra">Compra</option>
@@ -58,7 +58,7 @@
                             <option value="Canje">Canje</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="proveedor" class="form-label">Proveedor</label>
                         <select class="form-select" id="proveedor" name="proveedor_id">
                             <option value="">Seleccionar Proveedor</option>
@@ -86,6 +86,10 @@
 
                 <!-- Campos para Producto Principal (Compra/Retiro) -->
                 <div class="row g-3 mt-2" id="producto-principal-section">
+                    <div class="col-md-2">
+                        <label for="fecha_movimiento" class="form-label">Fecha del Movimiento</label>
+                        <input type="date" class="form-control" id="fecha_movimiento" name="fecha_movimiento" value="" required>
+                    </div>
                     <div class="col-md-4">
                         <label for="producto" class="form-label" id="producto-label">Producto</label>
                         <select class="form-select" id="producto" name="producto_id" required>
@@ -96,11 +100,11 @@
                         </select>
                         <a href="#" id="add-producto-link">Agregar nuevo producto</a>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="cantidad" class="form-label" id="cantidad-label">Cantidad (Lts)</label>
                         <input type="number" step="0.01" class="form-control" id="cantidad" name="cantidad" required>
                     </div>
-                    <div class="col-md-4">
+                    <div class="col-md-3">
                         <label for="precio_unitario" class="form-label" id="precio-label">Precio Unitario</label>
                         <input type="number" step="0.01" class="form-control" id="precio_unitario" name="precio_unitario">
                     </div>
@@ -227,6 +231,7 @@
                             <th>Cantidad</th>
                             <th>Precio Unit.</th>
                             <th>Total</th>
+                            <th>Acciones</th> <!-- New column header -->
                         </tr>
                     </thead>
                     <tbody>
@@ -239,16 +244,99 @@
                             <td>{{ mov.chofer_nombre }}</td>
                             <td>{{ mov.producto_nombre }}</td>
                             <td>{{ "%.2f" | format(mov.cantidad) }}</td>
-                            <td>${{ "%.2f" | format(mov.precio_unitario) }}</td>
-                            <td>${{ "%.2f" | format(mov.cantidad * mov.precio_unitario) }}</td>
+                            <td>${{ "%.2f" | format(mov.precio_unitario) if mov.precio_unitario is not none else '' }}</td>
+                            <td>${{ "%.2f" | format(mov.cantidad * mov.precio_unitario) if mov.precio_unitario is not none else '' }}</td>
+                            <td>
+                                <button class="btn btn-sm btn-warning edit-btn" data-id="{{ mov.id }}" data-bs-toggle="modal" data-bs-target="#editMovementModal">Editar</button>
+                                <button class="btn btn-sm btn-danger delete-btn" data-id="{{ mov.id }}">Eliminar</button>
+                            </td>
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="9" class="text-center">No hay movimientos registrados.</td>
+                            <td colspan="10" class="text-center">No hay movimientos registrados.</td> <!-- colspan updated -->
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Movement Modal -->
+<div class="modal fade" id="editMovementModal" tabindex="-1" aria-labelledby="editMovementModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="editMovementModalLabel">Editar Movimiento de Combustible</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="edit-movement-form" method="POST">
+                    <input type="hidden" id="edit_movement_id" name="id">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label for="edit_fecha_movimiento" class="form-label">Fecha del Movimiento</label>
+                            <input type="date" class="form-control" id="edit_fecha_movimiento" name="fecha_movimiento" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="edit_tipo_operacion" class="form-label">Tipo de Operación</label>
+                            <select class="form-select" id="edit_tipo_operacion" name="tipo_operacion" required disabled>
+                                <option value="Compra">Compra</option>
+                                <option value="Retiro">Retiro</option>
+                                <option value="Canje - Salida">Canje - Salida</option>
+                                <option value="Canje - Entrada">Canje - Entrada</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="edit_nro_comprobante" class="form-label">Nro. Comprobante</label>
+                            <input type="text" class="form-control" id="edit_nro_comprobante" name="nro_comprobante">
+                        </div>
+                    </div>
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-6">
+                            <label for="edit_proveedor" class="form-label">Proveedor</label>
+                            <select class="form-select" id="edit_proveedor" name="proveedor_id">
+                                <option value="">Seleccionar Proveedor</option>
+                                {% for p in proveedores %}
+                                <option value="{{ p.cli_c }}">{{ p.s_apelli }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="edit_chofer" class="form-label">Chofer Responsable</label>
+                            <select class="form-select" id="edit_chofer" name="chofer_documento" required>
+                                <option value="">Seleccionar Chofer</option>
+                                {% for c in choferes %}
+                                <option value="{{ c.c_document }}">{{ c.c_nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row g-3 mt-2">
+                        <div class="col-md-4">
+                            <label for="edit_producto" class="form-label">Producto</label>
+                            <select class="form-select" id="edit_producto" name="producto_id" required>
+                                <option value="">Seleccionar Producto</option>
+                                {% for prod in productos %}
+                                <option value="{{ prod.id }}">{{ prod.nombre }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="edit_cantidad" class="form-label">Cantidad (Lts)</label>
+                            <input type="number" step="0.01" class="form-control" id="edit_cantidad" name="cantidad" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="edit_precio_unitario" class="form-label">Precio Unitario</label>
+                            <input type="number" step="0.01" class="form-control" id="edit_precio_unitario" name="precio_unitario">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cerrar</button>
+                        <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>
@@ -346,6 +434,83 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
             });
         }
+    });
+
+    // New JavaScript for Edit and Delete
+    const editMovementModal = new bootstrap.Modal(document.getElementById('editMovementModal'));
+    const editMovementForm = document.getElementById('edit-movement-form');
+
+    editMovementForm.addEventListener('submit', function(e) {
+        e.preventDefault();
+        const formData = new FormData(this);
+        fetch(this.action, {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                editMovementModal.hide();
+                window.location.reload();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Ocurrió un error al guardar los cambios.');
+        });
+    });
+
+    document.querySelectorAll('.edit-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const movementId = this.dataset.id;
+            fetch(`/combustible/get/${movementId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.error) {
+                        alert(data.error);
+                        return;
+                    }
+                    document.getElementById('edit_movement_id').value = data.id;
+                    document.getElementById('edit_fecha_movimiento').value = data.fecha.split('T')[0]; // Assuming ISO format
+                    document.getElementById('edit_tipo_operacion').value = data.tipo_operacion;
+                    document.getElementById('edit_nro_comprobante').value = data.nro_comprobante;
+                    document.getElementById('edit_proveedor').value = data.proveedor_id || '';
+                    document.getElementById('edit_chofer').value = data.chofer_documento;
+                    document.getElementById('edit_producto').value = data.producto_id;
+                    document.getElementById('edit_cantidad').value = parseFloat(data.cantidad).toFixed(2);
+                    document.getElementById('edit_precio_unitario').value = parseFloat(data.precio_unitario).toFixed(2);
+                    
+                    editMovementForm.action = `/combustible/edit/${movementId}`;
+                    editMovementModal.show();
+                })
+                .catch(error => console.error('Error fetching movement data:', error));
+        });
+    });
+
+    document.querySelectorAll('.delete-btn').forEach(button => {
+        button.addEventListener('click', function() {
+            const movementId = this.dataset.id;
+            if (confirm('¿Estás seguro de que quieres eliminar este movimiento?')) {
+                fetch(`/combustible/delete/${movementId}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                    body: `id=${movementId}`
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        window.location.reload(); // Reload the page to show updated list
+                    } else {
+                        alert('Error al eliminar el movimiento: ' + data.error);
+                    }
+                })
+                .catch(error => console.error('Error deleting movement:', error));
+            }
+        });
     });
 });
 </script>
