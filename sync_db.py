@@ -226,6 +226,36 @@ def sync_dbfs_to_postgres():
             );""")
             print("Tabla 'passwords' creada o ya existente.")
 
+            # --- Tablas para Gestión de Combustible ---
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS combustible_proveedores (
+                id SERIAL PRIMARY KEY,
+                nombre VARCHAR(255) UNIQUE NOT NULL
+            );""")
+            print("Tabla 'combustible_proveedores' creada o ya existente.")
+
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS combustible_productos (
+                id SERIAL PRIMARY KEY,
+                nombre VARCHAR(255) UNIQUE NOT NULL
+            );""")
+            print("Tabla 'combustible_productos' creada o ya existente.")
+
+            cursor.execute("""
+            CREATE TABLE IF NOT EXISTS combustible_movimientos (
+                id SERIAL PRIMARY KEY,
+                fecha TIMESTAMP WITHOUT TIME ZONE DEFAULT (NOW() AT TIME ZONE 'UTC'),
+                proveedor_id INTEGER REFERENCES combustible_proveedores(id),
+                chofer_documento VARCHAR(255) REFERENCES choferes(c_document),
+                tipo_operacion VARCHAR(50) NOT NULL,
+                nro_comprobante VARCHAR(255),
+                producto_id INTEGER REFERENCES combustible_productos(id),
+                precio_unitario NUMERIC(12, 4),
+                cantidad NUMERIC(12, 4),
+                id_transaccion_canje INTEGER
+            );""")
+            print("Tabla 'combustible_movimientos' creada o ya existente.")
+
         conn.commit()
         print("\n¡Sincronización completada! Todos los cambios han sido guardados en la base de datos.")
 

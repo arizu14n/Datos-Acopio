@@ -2072,6 +2072,161 @@ def delete_flete(flete_id):
         if conn:
             conn.close()
 
+@app.route('/combustible', methods=['GET', 'POST'])
+def combustible():
+    conn = get_db()
+    if not conn:
+        return "<h1>Error: No se pudo conectar a la base de datos.</h1>"
+
+    try:
+        with get_dict_cursor(conn) as cursor:
+            if request.method == 'POST':
+                tipo_operacion = request.form.get('tipo_operacion')
+                proveedor_id = request.form.get('proveedor_id') if request.form.get('proveedor_id') else None
+                chofer_documento = request.form.get('chofer_documento')
+                nro_comprobante = request.form.get('nro_comprobante')
+                
+                # Asegurarse que el precio unitario sea None si está vacío
+                def clean_price(price_str):
+                    if price_str is None or price_str.strip() == '':
+                        return None
+                    try:
+                        return Decimal(price_str)
+                    except:
+                        return None
+
+                if tipo_operacion == 'Canje':
+                    producto_sale_id = request.form.get('producto_sale_id')
+                    cantidad_sale = Decimal(request.form.get('cantidad_sale', 0))
+                    producto_entra_id = request.form.get('producto_entra_id')
+                    cantidad_entra = Decimal(request.form.get('cantidad_entra', 0))
+                    precio_unitario = clean_price(request.form.get('precio_unitario_canje'))
+                    
+                    # Insertar salida
+                    cursor.execute("""
+                        INSERT INTO combustible_movimientos (proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id
+                    """, (proveedor_id, chofer_documento, 'Canje - Salida', nro_comprobante, producto_sale_id, -abs(cantidad_sale), None))
+                    id_salida = cursor.fetchone()[0]
+
+                    # Insertar entrada
+                    cursor.execute("""
+                        INSERT INTO combustible_movimientos (proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario, id_transaccion_canje)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                    """, (proveedor_id, chofer_documento, 'Canje - Entrada', nro_comprobante, producto_entra_id, abs(cantidad_entra), precio_unitario, id_salida))
+                    
+                else: # Compra o Retiro
+                    producto_id = request.form.get('producto_id')
+                    cantidad = Decimal(request.form.get('cantidad', 0))
+                    precio_unitario = clean_price(request.form.get('precio_unitario'))
+
+                    if tipo_operacion == 'Retiro':
+                        cantidad = -abs(cantidad)
+
+                    cursor.execute("""
+                        INSERT INTO combustible_movimientos (proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    """, (proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario))
+
+                conn.commit()
+                return redirect(url_for('combustible'))
+
+            # --- Lógica para GET ---
+            cursor.execute("SELECT cli_c, s_apelli FROM sysmae WHERE s_zonacu = 'PP' ORDER BY s_apelli")
+            proveedores = cursor.fetchall()
+            cursor.execute("SELECT id, nombre FROM combustible_productos ORDER BY nombre")
+            productos = cursor.fetchall()
+            cursor.execute("SELECT c_document, c_nombre FROM choferes ORDER BY c_nombre")
+            choferes = cursor.fetchall()
+
+            query = """
+                SELECT 
+                    m.id, m.fecha, m.tipo_operacion, m.nro_comprobante, m.cantidad, m.precio_unitario,
+                    p.s_apelli as proveedor_nombre,
+                    c.c_nombre as chofer_nombre,
+                    pr.nombre as producto_nombre
+                FROM combustible_movimientos m
+                LEFT JOIN sysmae p ON m.proveedor_id = p.cli_c
+                LEFT JOIN choferes c ON m.chofer_documento = c.c_document
+                LEFT JOIN combustible_productos pr ON m.producto_id = pr.id
+                WHERE 1=1
+            """
+            params = []
+            if request.args.get('filtro_proveedor'):
+                query += " AND m.proveedor_id = %s"
+                params.append(request.args.get('filtro_proveedor'))
+            if request.args.get('filtro_chofer'):
+                query += " AND m.chofer_documento = %s"
+                params.append(request.args.get('filtro_chofer'))
+            if request.args.get('filtro_producto'):
+                query += " AND m.producto_id = %s"
+                params.append(request.args.get('filtro_producto'))
+            if request.args.get('filtro_fecha_inicio'):
+                query += " AND m.fecha >= %s"
+                params.append(request.args.get('filtro_fecha_inicio'))
+            if request.args.get('filtro_fecha_fin'):
+                query += " AND m.fecha <= %s"
+                params.append(request.args.get('filtro_fecha_fin'))
+
+            query += " ORDER BY m.fecha DESC"
+            cursor.execute(query, params)
+            movimientos = cursor.fetchall()
+
+            cursor.execute("""
+                SELECT 
+                    p.s_apelli as proveedor, 
+                    pr.nombre as producto, 
+                    SUM(m.cantidad) as stock
+                FROM combustible_movimientos m
+                LEFT JOIN sysmae p ON m.proveedor_id = p.cli_c
+                LEFT JOIN combustible_productos pr ON m.producto_id = pr.id
+                GROUP BY p.s_apelli, pr.nombre
+                HAVING SUM(m.cantidad) != 0
+                ORDER BY p.s_apelli, pr.nombre
+            """)
+            stock = cursor.fetchall()
+
+            return render_template('combustible.html', 
+                                   movimientos=movimientos,
+                                   proveedores=proveedores,
+                                   productos=productos,
+                                   choferes=choferes,
+                                   stock=stock)
+    except Exception as e:
+        conn.rollback()
+        import traceback
+        return f"<h1>Ocurrió un error en la sección de Combustible: {e}</h1><pre>{traceback.format_exc()}</pre>"
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/add_combustible_producto', methods=['POST'])
+def add_combustible_producto():
+    conn = get_db()
+    if not conn:
+        return jsonify({'success': False, 'error': 'No se pudo conectar a la base de datos.'})
+    try:
+        data = request.json
+        nombre = data.get('nombre')
+        if not nombre:
+            return jsonify({'success': False, 'error': 'El nombre es requerido.'})
+
+        with get_dict_cursor(conn) as cursor:
+            cursor.execute("INSERT INTO combustible_productos (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING RETURNING id, nombre", (nombre,))
+            new_producto = cursor.fetchone()
+            conn.commit()
+            if not new_producto:
+                cursor.execute("SELECT id, nombre FROM combustible_productos WHERE nombre = %s", (nombre,))
+                new_producto = cursor.fetchone()
+
+        return jsonify({'success': True, 'producto': dict(new_producto)})
+    except Exception as e:
+        conn.rollback()
+        return jsonify({'success': False, 'error': str(e)})
+    finally:
+        if conn:
+            conn.close()
+
 @app.route('/export_compras_pdf')
 
 def export_compras_pdf():
