@@ -1336,10 +1336,13 @@ def cobranzas():
                 comprobante = f"{rec.get('fa1_f', '')}-{str(rec.get('fac_f', '')).zfill(8)}"
 
                 if tip_f in ('LF', 'LP', 'FA'):
-                    contrato = comprobante_to_contrato.get(comprobante)
-                    grano = 'N/A'
-                    if contrato:
-                        grano = contrato_to_grano.get(contrato, 'N/A')
+                    if tip_f == 'FA':
+                        grano = 'FACTURA'
+                    else:
+                        contrato = comprobante_to_contrato.get(comprobante)
+                        grano = 'N/A'
+                        if contrato:
+                            grano = contrato_to_grano.get(contrato, 'N/A')
                     
                     item = {
                         'vencimiento': format_date(rec.get('vto_f')),
