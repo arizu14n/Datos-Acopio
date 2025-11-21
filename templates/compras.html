@@ -66,8 +66,8 @@
                             <label for="origen">Origen</label>
                             <select class="form-control" id="origen" name="origen">
                                 <option value="">Todos</option>
-                                {% for code, name in origenes.items() %}
-                                    <option value="{{ code }}" {% if filtros_aplicados.origen == code %}selected{% endif %}>{{ name }}</option>
+                                {% for origen in origenes %}
+                                    <option value="{{ origen }}" {% if filtros_aplicados.origen == origen %}selected{% endif %}>{{ origen }}</option>
                                 {% endfor %}
                             </select>
                         </div>

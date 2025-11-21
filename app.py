@@ -550,13 +550,7 @@ def ventas():
             finally:
                 conn.close()
 
-        if totales_por_grano_cosecha:
-            for (grano, cosecha), data in totales_por_grano_cosecha.items():
-                if grano not in totales_por_grano:
-                    totales_por_grano[grano] = {'kilos': 0, 'camiones': 0}
-                totales_por_grano[grano]['kilos'] += data['kilos']
-                totales_por_grano[grano]['camiones'] += data['camiones']
-            
+        
         pie_chart_labels = list(totales_por_grano.keys())
         pie_chart_values = [totales_por_grano.get(key, {}).get('kilos', 0) for key in pie_chart_labels]
 
