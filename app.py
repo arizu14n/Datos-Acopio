@@ -746,14 +746,8 @@ def compras():
                 for rec in cursor.fetchall():
                     vendedores[rec['cli_c']] = rec['s_apelli'].strip()
 
-            cursor.execute("SELECT DISTINCT g_ctaplade FROM acohis WHERE g_ctl = 'I' AND g_ctaplade IS NOT NULL")
-            origen_codes = [row['g_ctaplade'] for row in cursor.fetchall()]
-
-            origenes = {}
-            if origen_codes:
-                cursor.execute("SELECT cli_c, s_locali FROM sysmae WHERE cli_c IN %s", (tuple(origen_codes),))
-                for rec in cursor.fetchall():
-                    origenes[rec['cli_c']] = rec['s_locali'].strip()
+            cursor.execute("SELECT DISTINCT g_locali FROM acohis WHERE g_ctl = 'I' AND g_locali IS NOT NULL AND g_locali != '' ORDER BY g_locali")
+            origenes = [row['g_locali'] for row in cursor.fetchall()]
 
             # --- Procesar filtros ---
             filtros_aplicados = {}
@@ -789,7 +783,7 @@ def compras():
                 query += " AND g_cose = %s"
                 params.append(filtros_aplicados['cosecha'])
             if filtros_aplicados.get('origen'):
-                query += " AND g_ctaplade = %s"
+                query += " AND g_locali = %s"
                 params.append(filtros_aplicados['origen'])
             
             query += " ORDER BY g_fecha DESC"
@@ -817,7 +811,7 @@ def compras():
                     'vendedor': vendedores.get(compra.get('cli_c'), ''),
                     'grano': granos.get(compra.get('g_codi'), ''),
                     'cosecha': compra.get('g_cose', ''),
-                    'origen': origenes.get(compra.get('g_ctaplade'), ''),
+                    'origen': compra.get('g_locali', ''),
                     'kilos_brutos': format_number(kilos_brutos, decimals=2),
                     'mermas': format_number(mermas, decimals=2),
                     'kilos_netos': format_number(kilos_netos, decimals=2)
@@ -2077,7 +2071,6 @@ def combustible():
     conn = get_db()
     if not conn:
         return "<h1>Error: No se pudo conectar a la base de datos.</h1>"
-
     try:
         with get_dict_cursor(conn) as cursor:
             if request.method == 'POST':
@@ -2087,8 +2080,6 @@ def combustible():
                 nro_comprobante = request.form.get('nro_comprobante')
                 fecha_movimiento_str = request.form.get('fecha_movimiento') # Get the manual date
                 fecha_movimiento = datetime.datetime.strptime(fecha_movimiento_str, '%Y-%m-%d') if fecha_movimiento_str else datetime.datetime.now()
-
-                # Asegurarse que el precio unitario sea None si está vacío
                 def clean_price(price_str):
                     if price_str is None or price_str.strip() == '':
                         return None
@@ -2096,27 +2087,21 @@ def combustible():
                         return Decimal(price_str)
                     except:
                         return None
-
                 if tipo_operacion == 'Canje':
                     producto_sale_id = request.form.get('producto_sale_id')
                     cantidad_sale = Decimal(request.form.get('cantidad_sale', 0))
                     producto_entra_id = request.form.get('producto_entra_id')
                     cantidad_entra = Decimal(request.form.get('cantidad_entra', 0))
                     precio_unitario = clean_price(request.form.get('precio_unitario_canje'))
-                    
-                    # Insertar salida
                     cursor.execute("""
                         INSERT INTO combustible_movimientos (fecha, proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s) RETURNING id
                     """, (fecha_movimiento, proveedor_id, chofer_documento, 'Canje - Salida', nro_comprobante, producto_sale_id, -abs(cantidad_sale), None))
                     id_salida = cursor.fetchone()[0]
-
-                    # Insertar entrada
                     cursor.execute("""
                         INSERT INTO combustible_movimientos (fecha, proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario, id_transaccion_canje)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                     """, (fecha_movimiento, proveedor_id, chofer_documento, 'Canje - Entrada', nro_comprobante, producto_entra_id, abs(cantidad_entra), precio_unitario, id_salida))
-                    
                 else: # Compra o Retiro
                     producto_id = request.form.get('producto_id')
                     cantidad = Decimal(request.form.get('cantidad', 0))
@@ -2129,18 +2114,14 @@ def combustible():
                         INSERT INTO combustible_movimientos (fecha, proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     """, (fecha_movimiento, proveedor_id, chofer_documento, tipo_operacion, nro_comprobante, producto_id, cantidad, precio_unitario))
-
                 conn.commit()
                 return redirect(url_for('combustible'))
-
-            # --- Lógica para GET ---
             cursor.execute("SELECT cli_c, s_apelli FROM sysmae WHERE s_zonacu = 'PP' ORDER BY s_apelli")
             proveedores = cursor.fetchall()
             cursor.execute("SELECT id, nombre FROM combustible_productos ORDER BY nombre")
             productos = cursor.fetchall()
             cursor.execute("SELECT c_document, c_nombre FROM choferes ORDER BY c_nombre")
             choferes = cursor.fetchall()
-
             query = """
                 SELECT 
                     m.id, m.fecha, m.tipo_operacion, m.nro_comprobante, m.cantidad, m.precio_unitario,
@@ -2169,11 +2150,9 @@ def combustible():
             if request.args.get('filtro_fecha_fin'):
                 query += " AND m.fecha <= %s"
                 params.append(request.args.get('filtro_fecha_fin'))
-
             query += " ORDER BY m.fecha DESC"
             cursor.execute(query, params)
             movimientos = cursor.fetchall()
-
             cursor.execute("""
                 SELECT 
                     p.s_apelli as proveedor, 
@@ -2187,20 +2166,91 @@ def combustible():
                 ORDER BY p.s_apelli, pr.nombre
             """)
             stock = cursor.fetchall()
-
-            today_date = datetime.date.today().strftime('%Y-%m-%d') # Get today's date for the template
-
-            return render_template('combustible.html', 
+            today_date = datetime.date.today().strftime('%Y-%m-%d')
+            return render_template('combustible.html',
                                    movimientos=movimientos,
                                    proveedores=proveedores,
                                    productos=productos,
                                    choferes=choferes,
                                    stock=stock,
-                                   today_date=today_date) # Pass today_date to the template
+                                   today_date=today_date)
     except Exception as e:
         conn.rollback()
         import traceback
         return f"<h1>Ocurrió un error en la sección de Combustible: {e}</h1><pre>{traceback.format_exc()}</pre>"
+    finally:
+        if conn:
+            conn.close()
+
+@app.route('/combustible/export_pdf')
+def export_combustible_pdf():
+    conn = get_db()
+    if not conn:
+        return "<h1>Error: No se pudo conectar a la base de datos.</h1>", 500
+    try:
+        with get_dict_cursor(conn) as cursor:
+            query = """
+                SELECT 
+                    m.id, m.fecha, m.tipo_operacion, m.nro_comprobante, m.cantidad, m.precio_unitario,
+                    p.s_apelli as proveedor_nombre,
+                    c.c_nombre as chofer_nombre,
+                    pr.nombre as producto_nombre
+                FROM combustible_movimientos m
+                LEFT JOIN sysmae p ON m.proveedor_id = p.cli_c
+                LEFT JOIN choferes c ON m.chofer_documento = c.c_document
+                LEFT JOIN combustible_productos pr ON m.producto_id = pr.id
+                WHERE 1=1
+            """
+            params = []
+            if request.args.get('filtro_proveedor'):
+                query += " AND m.proveedor_id = %s"
+                params.append(request.args.get('filtro_proveedor'))
+            if request.args.get('filtro_chofer'):
+                query += " AND m.chofer_documento = %s"
+                params.append(request.args.get('filtro_chofer'))
+            if request.args.get('filtro_producto'):
+                query += " AND m.producto_id = %s"
+                params.append(request.args.get('filtro_producto'))
+            if request.args.get('filtro_fecha_inicio'):
+                query += " AND m.fecha >= %s"
+                params.append(request.args.get('filtro_fecha_inicio'))
+            if request.args.get('filtro_fecha_fin'):
+                query += " AND m.fecha <= %s"
+                params.append(request.args.get('filtro_fecha_fin'))
+            query += " ORDER BY m.fecha DESC"
+            cursor.execute(query, params)
+            movimientos = cursor.fetchall()
+            if not movimientos:
+                return "No se encontraron movimientos para generar el PDF con los filtros aplicados.", 404
+            pdf = PDF(orientation='L', unit='mm', format='A4')
+            pdf.title = 'Historial de Movimientos de Combustible'
+            pdf.add_page()
+            headers = ['Fecha', 'Operacion', 'Comprobante', 'Proveedor', 'Chofer', 'Producto', 'Cantidad', 'Precio Unit.', 'Total']
+            table_data = []
+            for mov in movimientos:
+                cantidad = mov.get('cantidad', 0) or 0
+                precio = mov.get('precio_unitario', 0) or 0
+                total = cantidad * precio if precio is not None else 0
+                row = OrderedDict()
+                row['Fecha'] = mov.get('fecha').strftime('%d/%m/%Y %H:%M') if mov.get('fecha') else ''
+                row['Operacion'] = mov.get('tipo_operacion', '')
+                row['Comprobante'] = mov.get('nro_comprobante', '')
+                row['Proveedor'] = mov.get('proveedor_nombre', '')
+                row['Chofer'] = mov.get('chofer_nombre', '')
+                row['Producto'] = mov.get('producto_nombre', '')
+                row['Cantidad'] = format_number(cantidad, decimals=2)
+                row['Precio Unit.'] = format_number(precio, is_currency=True, decimals=2) if precio is not None else ''
+                row['Total'] = format_number(total, is_currency=True, decimals=2) if precio is not None else ''
+                table_data.append(row)
+            pdf.create_table(table_data, headers=headers)
+            
+            pdf_output = bytes(pdf.output(dest='S'))
+            return Response(pdf_output,
+                            mimetype='application/pdf',
+                            headers={'Content-Disposition': 'attachment;filename=reporte_combustible.pdf'})
+    except Exception as e:
+        import traceback
+        return f"<h1>Ocurrió un error al generar el PDF de combustible: {e}</h1><pre>{traceback.format_exc()}</pre>", 500
     finally:
         if conn:
             conn.close()
@@ -2215,7 +2265,6 @@ def add_combustible_producto():
         nombre = data.get('nombre')
         if not nombre:
             return jsonify({'success': False, 'error': 'El nombre es requerido.'})
-
         with get_dict_cursor(conn) as cursor:
             cursor.execute("INSERT INTO combustible_productos (nombre) VALUES (%s) ON CONFLICT (nombre) DO NOTHING RETURNING id, nombre", (nombre,))
             new_producto = cursor.fetchone()
@@ -2223,7 +2272,6 @@ def add_combustible_producto():
             if not new_producto:
                 cursor.execute("SELECT id, nombre FROM combustible_productos WHERE nombre = %s", (nombre,))
                 new_producto = cursor.fetchone()
-
         return jsonify({'success': True, 'producto': dict(new_producto)})
     except Exception as e:
         conn.rollback()
@@ -2233,57 +2281,31 @@ def add_combustible_producto():
             conn.close()
 
 @app.route('/export_compras_pdf')
-
 def export_compras_pdf():
-
     conn = get_db()
-
     if not conn:
-
         return "<h1>Error: No se pudo conectar a la base de datos.</h1>", 500
 
-
-
     try:
-
         with get_dict_cursor(conn) as cursor:
-
             # --- Obtener valores para mapeo ---
-
             cursor.execute("SELECT g_codi, g_desc FROM acogran")
-
             granos = {rec['g_codi']: rec['g_desc'].strip() for rec in cursor.fetchall()}
-
             
-
             cursor.execute("SELECT cli_c, s_apelli FROM sysmae")
-
             vendedores = {rec['cli_c']: rec['s_apelli'].strip() for rec in cursor.fetchall()}
 
-
-
             cursor.execute("SELECT cli_c, s_locali FROM sysmae")
-
             origenes = {rec['cli_c']: rec['s_locali'].strip() for rec in cursor.fetchall()}
 
-
-
             # --- Procesar filtros ---
-
             filtros = request.args
-
             query = "SELECT * FROM acohis WHERE g_ctl = 'I'"
-
             params = []
 
-
-
             if filtros.get('fecha_desde'):
-
                 query += " AND g_fecha >= %s"
-
                 params.append(filtros['fecha_desde'])
-
             if filtros.get('fecha_hasta'):
                 query += " AND g_fecha <= %s"
                 params.append(filtros['fecha_hasta'])
@@ -2291,115 +2313,60 @@ def export_compras_pdf():
                 query += " AND cli_c = %s"
                 params.append(filtros['vendedor'])
             if filtros.get('grano'):
-
                 query += " AND g_codi = %s"
-
                 params.append(filtros['grano'])
-
             if filtros.get('cosecha'):
-
                 query += " AND g_cose = %s"
-
                 params.append(filtros['cosecha'])
-
             if filtros.get('origen'):
-
                 query += " AND g_ctaplade = %s"
-
                 params.append(filtros['origen'])
-
             
-
             query += " ORDER BY g_fecha DESC"
-
             cursor.execute(query, params)
-
             compras_data = cursor.fetchall()
 
-
-
             if not compras_data:
-
                 return "No se encontraron registros para generar el PDF.", 404
 
-
-
             # --- Generar PDF ---
-
             pdf = PDF(orientation='L', unit='mm', format='A4')
-
             pdf.title = 'Reporte de Compras'
-
             pdf.add_page()
-
             
-
             headers = ['Fecha', 'CTG', 'Vendedor', 'Grano', 'Cosecha', 'Origen', 'K. Brutos', 'Mermas', 'K. Netos']
-
             
-
             table_data = []
-
             for compra in compras_data:
-
                 kilos_brutos = compra.get('o_peso', 0) or 0
-
                 kilos_netos = compra.get('o_neto', 0) or 0
-
                 mermas = kilos_brutos - kilos_netos
 
-
-
                 row = OrderedDict()
-
                 row['Fecha'] = format_date(compra.get('g_fecha'))
-
                 row['CTG'] = compra.get('g_ctg', '')
-
                 row['Vendedor'] = vendedores.get(compra.get('cli_c'), '')
-
                 row['Grano'] = granos.get(compra.get('g_codi'), '')
-
                 row['Cosecha'] = compra.get('g_cose', '')
-
                 row['Origen'] = origenes.get(compra.get('g_ctaplade'), '')
-
                 row['K. Brutos'] = format_number(kilos_brutos, decimals=2)
-
                 row['Mermas'] = format_number(mermas, decimals=2)
-
                 row['K. Netos'] = format_number(kilos_netos, decimals=2)
-
                 table_data.append(row)
 
-
-
             pdf.create_table(table_data, headers=headers)
-
             
-
             # Devolver el PDF como respuesta
-
-            pdf_output = pdf.output(dest='S').encode('latin-1')
-
+            pdf_output = bytes(pdf.output(dest='S'))
             return Response(pdf_output,
-
                             mimetype='application/pdf',
-
                             headers={'Content-Disposition': 'attachment;filename=reporte_compras.pdf'})
 
-
-
     except Exception as e:
-
         import traceback
-
         return f"<h1>Ocurrió un error al generar el PDF: {e}</h1><pre>{traceback.format_exc()}</pre>", 500
-
     finally:
-
         if conn:
-
             conn.close()
 
 

@@ -97,19 +97,20 @@ def sync_dbfs_to_postgres():
                     'contrat', 'contrat.dbf',
                     """CREATE TABLE IF NOT EXISTS contrat (
                         NROCONT_C VARCHAR(255) PRIMARY KEY, KILOPED_C NUMERIC, ENTREGA_C NUMERIC, LIQUIYA_C NUMERIC,
-                        COSECHA_C VARCHAR(255), PRODUCT_C VARCHAR(255), APELCOM_C VARCHAR(255)
+                        COSECHA_C VARCHAR(255), PRODUCT_C VARCHAR(255), APELCOM_C VARCHAR(255), FECONT_C DATE
                     );""",
-                    "INSERT INTO contrat VALUES (%s, %s, %s, %s, %s, %s, %s) ON CONFLICT (NROCONT_C) DO NOTHING",
-                    ['NROCONT_C', 'KILOPED_C', 'ENTREGA_C', 'LIQUIYA_C', 'COSECHA_C', 'PRODUCT_C', 'APELCOM_C']
+                    "INSERT INTO contrat VALUES (%s, %s, %s, %s, %s, %s, %s, %s) ON CONFLICT (NROCONT_C) DO NOTHING",
+                    ['NROCONT_C', 'KILOPED_C', 'ENTREGA_C', 'LIQUIYA_C', 'COSECHA_C', 'PRODUCT_C', 'APELCOM_C', 'FECONT_C']
                 ),
                 (
                     'acohis', 'acohis.dbf',
                     """CREATE TABLE IF NOT EXISTS acohis (
                         G_FECHA DATE, G_CTG VARCHAR(255), G_CODI VARCHAR(255), G_COSE VARCHAR(255), O_PESO NUMERIC, O_NETO NUMERIC,
-                        G_TARFLET NUMERIC, G_KILOMETR NUMERIC, G_CTAPLADE VARCHAR(255), G_CUILCHOF VARCHAR(255), G_CUITRAN VARCHAR(255), G_CTL VARCHAR(255), CLI_C VARCHAR(255)
+                        G_TARFLET NUMERIC, G_KILOMETR NUMERIC, G_CTAPLADE VARCHAR(255), G_CUILCHOF VARCHAR(255), G_CUITRAN VARCHAR(255), 
+                        G_CTL VARCHAR(255), CLI_C VARCHAR(255), G_LOCALI VARCHAR(255)
                     );""",
-                    "INSERT INTO acohis VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
-                    ['G_FECHA', 'G_CTG', 'G_CODI', 'G_COSE', 'O_PESO', 'O_NETO', 'G_TARFLET', 'G_KILOMETR', 'G_CTAPLADE', 'G_CUILCHOF', 'G_CUITRAN', 'G_CTL', 'CLI_C']
+                    "INSERT INTO acohis VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                    ['G_FECHA', 'G_CTG', 'G_CODI', 'G_COSE', 'O_PESO', 'O_NETO', 'G_TARFLET', 'G_KILOMETR', 'G_CTAPLADE', 'G_CUILCHOF', 'G_CUITRAN', 'G_CTL', 'CLI_C', 'G_LOCALI']
                 ),
                 (
                     'sysmae', 'sysmae.dbf',
@@ -156,10 +157,31 @@ def sync_dbfs_to_postgres():
                     dbf = DBF(dbf_path, encoding='iso-8859-1')
                     record_count = 0
                     error_count = 0
+                    skipped_count = 0
 
                     # 4. Insertar registros uno por uno
                     for rec in dbf:
                         record_count += 1
+
+                        # Filtro de fecha para tablas específicas
+                        if table_name in ['acohis', 'liqven', 'ccbcta', 'acocarpo', 'contrat']:
+                            date_field_name = ''
+                            if table_name == 'acohis':
+                                date_field_name = 'G_FECHA'
+                            elif table_name == 'liqven':
+                                date_field_name = 'FEC_C'
+                            elif table_name == 'ccbcta':
+                                date_field_name = 'VTO_F'
+                            elif table_name == 'acocarpo':
+                                date_field_name = 'G_FECHA'
+                            elif table_name == 'contrat':
+                                date_field_name = 'FECONT_C'
+                            
+                            record_date = rec.get(date_field_name)
+                            if record_date and isinstance(record_date, datetime.date) and record_date.year < 2023:
+                                skipped_count += 1
+                                continue
+                        
                         try:
                             # Limpiar y preparar datos
                             values = []
@@ -184,7 +206,7 @@ def sync_dbfs_to_postgres():
                             print(f"  [Error Fila #{record_count}] No se pudo insertar el registro en '{table_name}'. Causa: {e}")
                             print(f"  [Error Fila #{record_count}] Datos problemáticos: {dict(rec)}")
                     
-                    print(f"Sincronización de '{table_name}' finalizada. Total de registros: {record_count}. Errores: {error_count}.")
+                    print(f"Sincronización de '{table_name}' finalizada. Total de registros leídos: {record_count}. Registros de años anteriores a 2023 omitidos: {skipped_count}. Errores: {error_count}.")
 
                 except FileNotFoundError:
                     print(f"  [Error Fatal] Archivo no encontrado: {dbf_path}. Saltando tabla '{table_name}'.")
@@ -231,8 +253,6 @@ def sync_dbfs_to_postgres():
             print("Tabla 'passwords' creada o ya existente.")
 
             # --- Tablas para Gestión de Combustible ---
-            cursor.execute("""DROP TABLE IF EXISTS combustible_proveedores CASCADE;""")
-            print("Tabla 'combustible_proveedores' eliminada (si existía).")
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS combustible_proveedores (
                 id SERIAL PRIMARY KEY,
@@ -240,8 +260,6 @@ def sync_dbfs_to_postgres():
             );""")
             print("Tabla 'combustible_proveedores' creada o ya existente.")
 
-            cursor.execute("""DROP TABLE IF EXISTS combustible_productos CASCADE;""")
-            print("Tabla 'combustible_productos' eliminada (si existía).")
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS combustible_productos (
                 id SERIAL PRIMARY KEY,
@@ -249,8 +267,6 @@ def sync_dbfs_to_postgres():
             );""")
             print("Tabla 'combustible_productos' creada o ya existente.")
 
-            cursor.execute("""DROP TABLE IF EXISTS combustible_movimientos CASCADE;""")
-            print("Tabla 'combustible_movimientos' eliminada (si existía).")
             cursor.execute("""
             CREATE TABLE IF NOT EXISTS combustible_movimientos (
                 id SERIAL PRIMARY KEY,
