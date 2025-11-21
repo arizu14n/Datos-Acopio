@@ -84,6 +84,28 @@ def sync_db():
         print(f"Error inesperado: {str(e)}")
         return jsonify({'status': 'error', 'message': f'Ocurrió un error inesperado: {str(e)}'}), 500
 
+@app.route('/update-sync-db', methods=['POST'])
+def update_sync_db():
+    """
+    Endpoint para ejecutar el script de sincronización por actualización (upsert).
+    """
+    try:
+        python_executable = sys.executable
+        result = subprocess.run(
+            [python_executable, 'update_sync.py'],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        print(result.stdout)
+        return jsonify({'status': 'success', 'message': 'Sincronización por actualización completada exitosamente.'})
+    except subprocess.CalledProcessError as e:
+        print(f"Error durante la sincronización por actualización: {e.stderr}")
+        return jsonify({'status': 'error', 'message': f'Error durante la sincronización por actualización: {e.stderr}'}), 500
+    except Exception as e:
+        print(f"Error inesperado: {str(e)}")
+        return jsonify({'status': 'error', 'message': f'Ocurrió un error inesperado: {str(e)}'}), 500
+
 
 
 def format_date(date_obj):

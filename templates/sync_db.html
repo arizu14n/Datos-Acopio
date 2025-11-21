@@ -12,10 +12,10 @@
             padding: 2rem;
             text-align: center;
         }
-        #sync-button {
+        .btn {
             font-size: 1.2rem;
             padding: 0.8rem 1.5rem;
-            margin-bottom: 1rem;
+            margin: 0.5rem;
         }
         #sync-status {
             margin-top: 1rem;
@@ -30,7 +30,7 @@
             border-left-color: #09f;
             animation: spin 1s ease infinite;
             display: none; /* Oculto por defecto */
-            margin-bottom: 1rem;
+            margin: 1rem auto;
         }
         @keyframes spin {
             0% {
@@ -46,10 +46,17 @@
 {% block content %}
 <div class="sync-container">
     <h1>Sincronizar Base de Datos</h1>
-    <p>Presiona el botón para iniciar la sincronización de las tablas DBF a las tablas espejo en PostgreSQL.</p>
-    <p>Este proceso puede tardar unos minutos.</p>
+    <p>Selecciona el tipo de sincronización que deseas realizar.</p>
     
-    <button id="sync-button" class="btn btn-primary">Iniciar Sincronización</button>
+    <div class="my-3">
+        <button id="sync-button" class="btn btn-primary">Sincronización Completa (Lento)</button>
+        <p class="form-text">Borra todos los datos y los vuelve a cargar desde cero. Útil si faltan datos o hay inconsistencias.</p>
+    </div>
+
+    <div class="my-3">
+        <button id="update-sync-button" class="btn btn-secondary">Sincronización Rápida (Actualizar)</button>
+        <p class="form-text">Solo actualiza los registros existentes y añade los nuevos. No elimina registros borrados en el origen.</p>
+    </div>
     
     <div id="spinner" class="spinner"></div>
     <div id="sync-status"></div>
@@ -58,25 +65,27 @@
 
 {% block scripts %}
 <script>
-document.getElementById('sync-button').addEventListener('click', function() {
-    const syncButton = this;
+function handleSync(buttonId, url, buttonText) {
+    const syncButton = document.getElementById(buttonId);
+    const otherButtonId = (buttonId === 'sync-button') ? 'update-sync-button' : 'sync-button';
+    const otherButton = document.getElementById(otherButtonId);
     const spinner = document.getElementById('spinner');
     const statusDiv = document.getElementById('sync-status');
 
-    // Deshabilitar botón y mostrar spinner
     syncButton.disabled = true;
+    otherButton.disabled = true;
     syncButton.textContent = 'Sincronizando...';
     spinner.style.display = 'block';
     statusDiv.textContent = '';
     statusDiv.className = '';
 
-    fetch('{{ url_for("sync_db") }}', {
+    fetch(url, {
         method: 'POST'
     })
     .then(response => response.json())
     .then(data => {
         if (data.status === 'success') {
-            statusDiv.textContent = '¡Sincronización completada exitosamente!';
+            statusDiv.textContent = '¡' + data.message + '!';
             statusDiv.classList.add('alert', 'alert-success');
         } else {
             statusDiv.textContent = 'Error en la sincronización: ' + data.message;
@@ -88,11 +97,19 @@ document.getElementById('sync-button').addEventListener('click', function() {
         statusDiv.classList.add('alert', 'alert-danger');
     })
     .finally(() => {
-        // Rehabilitar botón y ocultar spinner
         syncButton.disabled = false;
-        syncButton.textContent = 'Iniciar Sincronización';
+        otherButton.disabled = false;
+        syncButton.textContent = buttonText;
         spinner.style.display = 'none';
     });
+}
+
+document.getElementById('sync-button').addEventListener('click', function() {
+    handleSync('sync-button', '{{ url_for("sync_db") }}', 'Sincronización Completa (Lento)');
+});
+
+document.getElementById('update-sync-button').addEventListener('click', function() {
+    handleSync('update-sync-button', '{{ url_for("update_sync_db") }}', 'Sincronización Rápida (Actualizar)');
 });
 </script>
 {% endblock %}
