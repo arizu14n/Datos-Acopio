@@ -349,7 +349,7 @@ def dashboard():
                         tip_f = rec.get('tip_f', '').strip().upper()
                         imp_f = rec.get('imp_f', 0) or 0
                         
-                        if tip_f in ('LF', 'LP'):
+                        if tip_f in ('LF', 'LP', 'FA'):
                             vencimientos += imp_f
                         elif tip_f in ('RI', 'SI', 'SG', 'SB'):
                             cobrado += imp_f
@@ -1335,7 +1335,7 @@ def cobranzas():
                 cliente_code = rec.get('cli_f', '').strip()
                 comprobante = f"{rec.get('fa1_f', '')}-{str(rec.get('fac_f', '')).zfill(8)}"
 
-                if tip_f in ('LF', 'LP'):
+                if tip_f in ('LF', 'LP', 'FA'):
                     contrato = comprobante_to_contrato.get(comprobante)
                     grano = 'N/A'
                     if contrato:
