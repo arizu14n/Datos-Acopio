@@ -1,41 +1,83 @@
-body { 
-    font-family: Arial, sans-serif; 
+body {
+    font-family: Arial, sans-serif;
     margin: 0;
     background: linear-gradient(to bottom, #e8f5e9, #c8e6c9);
+    display: flex;
+    flex-direction: row; /* For sidebar layout */
     min-height: 100vh;
-    display: flex; /* Added for sticky footer */
-    flex-direction: column; /* Added for sticky footer */
+    transition: margin-left 0.3s; /* Smooth transition */
 }
-.navbar {
+
+.sidebar {
+    width: 250px;
+    position: fixed;
+    left: 0;
+    top: 0;
+    height: 100%;
     background-color: #2e7d32;
-    overflow: hidden;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+    padding-top: 20px;
+    z-index: 1000; /* Ensure it's on top */
+    overflow-y: auto;
+    transition: width 0.3s; /* Smooth transition */
 }
-.navbar a {
-    float: left;
-    display: block;
+
+.sidebar-title {
     color: white;
     text-align: center;
-    padding: 14px 20px;
+    margin-bottom: 30px;
+    font-size: 24px;
+    white-space: nowrap; /* Keep title on one line */
+    overflow: hidden;
+}
+
+.sidebar a {
+    display: block;
+    color: white;
+    padding: 12px 20px;
     text-decoration: none;
     font-size: 17px;
+    border-left: 3px solid transparent;
+    transition: background-color 0.3s, border-left 0.3s;
+    white-space: nowrap; /* Keep text on one line */
+    overflow: hidden;
 }
-.navbar a:hover {
+
+.sidebar a:hover,
+.sidebar a.active { /* Add an active class for the current page if needed */
     background-color: #388e3c;
+    border-left: 3px solid #fbc02d; /* Accent color */
 }
+
+.sidebar a i {
+    margin-right: 15px;
+    width: 20px; /* Align icons */
+    text-align: center;
+    transition: margin-right 0.3s;
+}
+
+.main-content {
+    margin-left: 250px; /* Same as sidebar width */
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    width: calc(100% - 250px); /* Ensure it takes remaining width */
+    transition: margin-left 0.3s, width 0.3s; /* Smooth transition */
+}
+
 .content {
     padding: 20px;
-    flex-grow: 1; /* Added for sticky footer */
+    flex-grow: 1;
 }
+
 .footer {
     background-color: #333;
     color: white;
     text-align: center;
     padding: 15px;
-    /* Removed position: relative, bottom: 0, width: 100% as flexbox handles it */
     box-shadow: 0 -2px 5px rgba(0,0,0,0.1);
-    margin-top: 40px;
 }
+
 .table-container {
     background-color: white;
     border-radius: 12px;
@@ -51,4 +93,28 @@ body {
 
 #dataTable tbody tr.overdue-task td {
     background-color: #ffe0b2 !important; /* Ensure cells also get the background color */
+}
+
+/* --- NEW RESPONSIVE STYLES --- */
+
+/* Medium screens: Collapsed icon-only sidebar */
+@media (max-width: 992px) {
+    .sidebar {
+        width: 80px;
+    }
+    .sidebar .sidebar-title, .sidebar .nav-text {
+        display: none;
+    }
+    .sidebar a {
+        padding: 15px 10px;
+        text-align: center;
+    }
+    .sidebar a i {
+        margin-right: 0;
+        font-size: 20px;
+    }
+    .main-content {
+        margin-left: 80px;
+        width: calc(100% - 80px);
+    }
 }

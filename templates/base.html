@@ -10,28 +10,29 @@
     {% block head_extra %}{% endblock %}
 </head>
 <body>
-    <div class="navbar">
-        <a href="{{ url_for('dashboard') }}">Dashboard</a>
-        <a href="{{ url_for('ventas') }}">Ventas</a>
-        <a href="{{ url_for('compras') }}">Compras</a>
-        <a href="{{ url_for('cobranzas') }}">Cobranzas</a>
-        <a href="{{ url_for('fletes') }}">Fletes</a>
-        <a href="{{ url_for('combustible') }}">Combustible</a>
-        <a href="{{ url_for('consultas') }}">Consultas</a>
-        <a href="{{ url_for('agenda') }}">Agenda</a>
-        <a href="{{ url_for('sync_db_page') }}">Sync DB</a>
-        <a href="{{ url_for('home') }}">Inicio</a>
-    </div>
-        
+    <div class="sidebar">
+        <h3 class="sidebar-title">Acopio</h3>
+        <a href="{{ url_for('dashboard') }}"><i class="fas fa-tachometer-alt"></i> <span class="nav-text">Dashboard</span></a>
+        <a href="{{ url_for('ventas') }}"><i class="fas fa-chart-line"></i> <span class="nav-text">Ventas</span></a>
+        <a href="{{ url_for('compras') }}"><i class="fas fa-shopping-cart"></i> <span class="nav-text">Compras</span></a>
+        <a href="{{ url_for('cobranzas') }}"><i class="fas fa-hand-holding-usd"></i> <span class="nav-text">Cobranzas</span></a>
+        <a href="{{ url_for('fletes') }}"><i class="fas fa-truck"></i> <span class="nav-text">Fletes</span></a>
+        <a href="{{ url_for('combustible') }}"><i class="fas fa-gas-pump"></i> <span class="nav-text">Combustible</span></a>
+        <a href="{{ url_for('consultas') }}"><i class="fas fa-search"></i> <span class="nav-text">Consultas</span></a>
+        <a href="{{ url_for('agenda') }}"><i class="fas fa-calendar-alt"></i> <span class="nav-text">Agenda</span></a>
+        <a href="{{ url_for('sync_db_page') }}"><i class="fas fa-sync"></i> <span class="nav-text">Sync DB</span></a>
+        <a href="{{ url_for('home') }}"><i class="fas fa-home"></i> <span class="nav-text">Inicio</span></a>
     </div>
 
-    <div class="content">
-        {% block content %}{% endblock %}
+    <div class="main-content">
+        <div class="content">
+            {% block content %}{% endblock %}
+        </div>
+        <footer class="footer">
+            <p>Extensión Sistema Acopio - Desarrollador: Ariel Zulián and IA Code Assist. Año: 2025</p>
+        </footer>
     </div>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" integrity="sha384-YvpcrYf0tY3lHB60NNkmXc5s9fDVZLESaAA55NDzOxhy9GkcIdslK1eN7N6jIeHz" crossorigin="anonymous"></script>
     {% block scripts %}{% endblock %}
-    <footer class="footer">
-        <p>Extensión Sistema Acopio - Desarrollador: Ariel Zulián and IA Code Assist. Año: 2025</p>
-    </footer>
 </body>
 </html>
