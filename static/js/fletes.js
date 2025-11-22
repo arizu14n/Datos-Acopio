@@ -64,20 +64,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Form validation on submit
     fleteForm.addEventListener('submit', function(event) {
-        const pesoBruto = parseFloat(document.getElementById('o_peso').value);
-        const pesoTara = parseFloat(document.getElementById('o_tara').value);
-
-        if (isNaN(pesoBruto) || isNaN(pesoTara)) {
-            alert('Por favor, ingrese valores numéricos para Kilos Brutos y Kilos Tara.');
-            event.preventDefault();
-            return;
-        }
-
-        if (pesoBruto <= pesoTara) {
-            alert('Los Kilos Brutos deben ser mayores que los Kilos Tara.');
-            event.preventDefault();
-            return;
-        }
+        
     });
 
     // Open modal for new flete
@@ -118,9 +105,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     document.getElementById("g_ctaplade").value = data.g_ctaplade;
                     document.getElementById("categoria").value = data.categoria;
                     document.getElementById("o_peso").value = data.o_peso;
-                    
-                    const tara = data.o_peso - data.o_neto;
-                    document.getElementById("o_tara").value = tara.toFixed(2);
+                    document.getElementById("o_neto").value = data.o_neto;
 
                     document.getElementById("g_tarflet").value = data.g_tarflet;
                     document.getElementById("g_kilomet").value = data.g_kilomet;

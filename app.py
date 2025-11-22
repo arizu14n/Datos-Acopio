@@ -1411,7 +1411,7 @@ def importar_fletes_desde_acohis():
                         continue
 
                     # Common data processing
-                    kilos_netos = rec.get('o_neto', 0) or 0
+                    kilos_netos = rec.get('o_peso', 0) or 0
                     tarifa = rec.get('g_tarflet', 0) or 0
                     try:
                         kilos_netos_float = float(kilos_netos)
@@ -1528,17 +1528,12 @@ def nuevo_flete():
                     g_codi = request.form['g_codi']
                     g_cose = request.form['g_cose']
                     o_peso = float(request.form['o_peso'])
-                    o_tara = float(request.form['o_tara'])
+                    o_neto = float(request.form['o_neto'])
                     g_tarflet = float(request.form['g_tarflet'])
                     g_kilomet = int(request.form['g_kilomet'])
                     g_ctaplade = request.form['g_ctaplade']
                     g_cuilchof = request.form['g_cuilchof']
                     categoria = request.form['categoria']
-
-                    if o_peso <= o_tara:
-                        return "Error: Los Kilos Brutos deben ser mayores que los Kilos Tara."
-
-                    o_neto = o_peso - o_tara
                     
                     importe = round((o_neto / 1000) * g_tarflet, 2)
 
@@ -1592,6 +1587,7 @@ def fletes():
         sorted_all_choferes = OrderedDict()
         unique_localidades = OrderedDict()
         categorias = []
+        resumen_chofer = None
         
         conn = get_db()
         if not conn:
@@ -1716,6 +1712,70 @@ def fletes():
                 if filtros_aplicados.get('chofer'):
                     nombre_chofer_seleccionado = choferes_map.get(filtros_aplicados['chofer'])
 
+                # --- Lógica para el Resumen por Chofer ---
+                if filtros_aplicados.get('chofer') and not filtros_aplicados.get('categoria'):
+                    resumen_chofer = {
+                        'rosario': Decimal(0), 'harina_otros': Decimal(0), 'arrimes': Decimal(0),
+                        'iva': Decimal(0), 'total_facturado': Decimal(0), 'toneladas': Decimal(0),
+                        'viajes': len(fletes_db), 'km': Decimal(0), 'gasoil': Decimal(0)
+                    }
+                    total_neto_resumen = Decimal(0)
+
+                    for flete in fletes_db:
+                        categoria = ''
+                        if flete['g_ctg'] and flete['g_ctg'].startswith('102'):
+                            categoria = 'ROSARIO'
+                        elif flete['g_ctg'] and flete['g_ctg'].startswith('101'):
+                            categoria = 'ARRIMES'
+                        else:
+                            categoria = flete.get('categoria') or ''
+                        
+                        importe = flete.get('importe') or Decimal(0)
+
+                        if categoria == 'ROSARIO':
+                            resumen_chofer['rosario'] += importe
+                        elif categoria == 'HARINA - OTROS':
+                            resumen_chofer['harina_otros'] += importe
+                        elif categoria == 'ARRIMES':
+                            resumen_chofer['arrimes'] += importe
+
+                        resumen_chofer['km'] += flete.get('g_kilomet') or Decimal(0)
+                        total_neto_resumen += flete.get('o_neto') or Decimal(0)
+                    
+                    subtotal = resumen_chofer['rosario'] + resumen_chofer['harina_otros'] + resumen_chofer['arrimes']
+                    resumen_chofer['iva'] = subtotal * Decimal('0.21')
+                    resumen_chofer['total_facturado'] = subtotal + resumen_chofer['iva']
+                    resumen_chofer['toneladas'] = total_neto_resumen / 1000
+
+                    try:
+                        cursor.execute("SELECT id FROM combustible_productos WHERE nombre ILIKE %s", ('%GAS-OIL%',))
+                        gasoil_prod_id_result = cursor.fetchone()
+                        gasoil_prod_id = gasoil_prod_id_result['id'] if gasoil_prod_id_result else None
+
+                        if gasoil_prod_id:
+                            cursor.execute("""
+                                SELECT SUM(cantidad) as total_gasoil
+                                FROM combustible_movimientos
+                                WHERE chofer_documento = %s AND producto_id = %s AND fecha BETWEEN %s AND %s AND tipo_operacion = 'Retiro'
+                            """, (
+                                filtros_aplicados['chofer'], gasoil_prod_id,
+                                filtros_aplicados['fecha_desde'], filtros_aplicados['fecha_hasta']
+                            ))
+                            gasoil_result = cursor.fetchone()
+                            resumen_chofer['gasoil'] = abs(gasoil_result['total_gasoil'] or Decimal(0))
+                    except Exception as e:
+                        print(f"Error al buscar datos de GAS-OIL: {e}")
+
+                    resumen_chofer['precio_prom_ton'] = (resumen_chofer['total_facturado'] / resumen_chofer['toneladas']) if resumen_chofer['toneladas'] > 0 else Decimal(0)
+                    resumen_chofer['fact_sin_iva_km'] = (subtotal / resumen_chofer['km']) if resumen_chofer['km'] > 0 else Decimal(0)
+                    resumen_chofer['fact_con_iva_km'] = (resumen_chofer['total_facturado'] / resumen_chofer['km']) if resumen_chofer['km'] > 0 else Decimal(0)
+                    resumen_chofer['consumo_100km'] = (resumen_chofer['gasoil'] / resumen_chofer['km'] * 100) if resumen_chofer['km'] > 0 else Decimal(0)
+                    
+                    resumen_chofer['periodo_desde'] = format_date(datetime.datetime.strptime(filtros_aplicados['fecha_desde'], '%Y-%m-%d'))
+                    resumen_chofer['periodo_hasta'] = format_date(datetime.datetime.strptime(filtros_aplicados['fecha_hasta'], '%Y-%m-%d'))
+                    resumen_chofer['chofer_nombre'] = choferes_map.get(filtros_aplicados['chofer'])
+
+
                 # --- Preparar datos para el template ---
                 cuils_con_registros = set()
                 cursor.execute("SELECT DISTINCT g_cuilchof FROM fletes WHERE g_cuilchof IS NOT NULL AND g_cuilchof != ''")
@@ -1741,11 +1801,143 @@ def fletes():
                                granos=granos_map,
                                all_choferes=sorted_all_choferes,
                                localidades=unique_localidades,
-                               categorias=categorias)
+                               categorias=categorias,
+                               resumen_chofer=resumen_chofer)
 
     except Exception as e:
         import traceback
         return f"<h1>Ocurrió un error: {e}</h1><pre>{traceback.format_exc()}</pre>"
+
+@app.route('/fletes/export_resumen_pdf')
+def export_resumen_pdf():
+    chofer_cuil = request.args.get('chofer')
+    fecha_desde = request.args.get('fecha_desde')
+    fecha_hasta = request.args.get('fecha_hasta')
+
+    if not chofer_cuil or not fecha_desde or not fecha_hasta:
+        return "Error: Faltan parámetros para generar el reporte.", 400
+
+    conn = get_db()
+    if not conn:
+        return "<h1>Error: No se pudo conectar a la base de datos.</h1>"
+
+    try:
+        with get_dict_cursor(conn) as cursor:
+            # --- Recalculate summary data ---
+            cursor.execute("SELECT * FROM fletes WHERE g_cuilchof = %s AND g_fecha BETWEEN %s AND %s",
+                           (chofer_cuil, fecha_desde, fecha_hasta))
+            fletes_db = cursor.fetchall()
+            
+            cursor.execute("SELECT c_nombre FROM choferes WHERE c_document = %s", (chofer_cuil,))
+            chofer_nombre_result = cursor.fetchone()
+            chofer_nombre = chofer_nombre_result['c_nombre'] if chofer_nombre_result else chofer_cuil
+
+            resumen_chofer = {
+                'rosario': Decimal(0), 'harina_otros': Decimal(0), 'arrimes': Decimal(0),
+                'iva': Decimal(0), 'total_facturado': Decimal(0), 'toneladas': Decimal(0),
+                'viajes': len(fletes_db), 'km': Decimal(0), 'gasoil': Decimal(0)
+            }
+            total_neto_resumen = Decimal(0)
+
+            for flete in fletes_db:
+                categoria = ''
+                if flete['g_ctg'] and flete['g_ctg'].startswith('102'):
+                    categoria = 'ROSARIO'
+                elif flete['g_ctg'] and flete['g_ctg'].startswith('101'):
+                    categoria = 'ARRIMES'
+                else:
+                    categoria = flete.get('categoria') or ''
+                
+                importe = flete.get('importe') or Decimal(0)
+
+                if categoria == 'ROSARIO':
+                    resumen_chofer['rosario'] += importe
+                elif categoria == 'HARINA - OTROS':
+                    resumen_chofer['harina_otros'] += importe
+                elif categoria == 'ARRIMES':
+                    resumen_chofer['arrimes'] += importe
+
+                resumen_chofer['km'] += flete.get('g_kilomet') or Decimal(0)
+                total_neto_resumen += flete.get('o_neto') or Decimal(0)
+            
+            subtotal = resumen_chofer['rosario'] + resumen_chofer['harina_otros'] + resumen_chofer['arrimes']
+            resumen_chofer['iva'] = subtotal * Decimal('0.21')
+            resumen_chofer['total_facturado'] = subtotal + resumen_chofer['iva']
+            resumen_chofer['toneladas'] = total_neto_resumen / 1000
+
+            try:
+                cursor.execute("SELECT id FROM combustible_productos WHERE nombre ILIKE %s", ('%GAS-OIL%',))
+                gasoil_prod_id_result = cursor.fetchone()
+                gasoil_prod_id = gasoil_prod_id_result['id'] if gasoil_prod_id_result else None
+
+                if gasoil_prod_id:
+                    cursor.execute("""
+                        SELECT SUM(cantidad) as total_gasoil
+                        FROM combustible_movimientos
+                        WHERE chofer_documento = %s AND producto_id = %s AND fecha BETWEEN %s AND %s AND tipo_operacion = 'Retiro'
+                    """, (chofer_cuil, gasoil_prod_id, fecha_desde, fecha_hasta))
+                    gasoil_result = cursor.fetchone()
+                    resumen_chofer['gasoil'] = abs(gasoil_result['total_gasoil'] or Decimal(0))
+            except Exception as e:
+                print(f"Error al buscar datos de GAS-OIL para PDF: {e}")
+
+            resumen_chofer['precio_prom_ton'] = (resumen_chofer['total_facturado'] / resumen_chofer['toneladas']) if resumen_chofer['toneladas'] > 0 else Decimal(0)
+            resumen_chofer['fact_sin_iva_km'] = (subtotal / resumen_chofer['km']) if resumen_chofer['km'] > 0 else Decimal(0)
+            resumen_chofer['fact_con_iva_km'] = (resumen_chofer['total_facturado'] / resumen_chofer['km']) if resumen_chofer['km'] > 0 else Decimal(0)
+            resumen_chofer['consumo_100km'] = (resumen_chofer['gasoil'] / resumen_chofer['km'] * 100) if resumen_chofer['km'] > 0 else Decimal(0)
+            
+            # --- Generate PDF ---
+            pdf = PDF(orientation='P', unit='mm', format='A4')
+            pdf.title = f"Resumen de Fletes para {chofer_nombre}"
+            pdf.add_page()
+            pdf.set_font('Arial', 'B', 14)
+            pdf.cell(0, 10, pdf.title, 0, 1, 'C')
+            pdf.ln(5)
+
+            pdf.set_font('Arial', '', 10)
+            pdf.cell(0, 7, f"Período: Desde: {format_date(datetime.datetime.strptime(fecha_desde, '%Y-%m-%d'))} Hasta: {format_date(datetime.datetime.strptime(fecha_hasta, '%Y-%m-%d'))}", 0, 1)
+            pdf.cell(0, 7, f"Chofer: {chofer_nombre}", 0, 1)
+            pdf.ln(5)
+
+            def add_line(label, value, is_currency=False, decimals=2):
+                pdf.set_font('Arial', 'B', 10)
+                pdf.cell(60, 8, label, 0, 0)
+                pdf.set_font('Arial', '', 10)
+                formatted_value = format_number(value, is_currency=is_currency, decimals=decimals)
+                pdf.cell(0, 8, formatted_value, 0, 1)
+
+            add_line('Montos Facturados por Categoría:', '', False)
+            add_line('ROSARIO', resumen_chofer['rosario'], True)
+            add_line('HARINA - OTROS', resumen_chofer['harina_otros'], True)
+            add_line('ARRIMES', resumen_chofer['arrimes'], True)
+            pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+            pdf.ln(1)
+            add_line('IVA (21%)', resumen_chofer['iva'], True)
+            pdf.line(pdf.get_x(), pdf.get_y(), pdf.get_x() + 190, pdf.get_y())
+            pdf.ln(1)
+            add_line('TOTAL FACTURADO', resumen_chofer['total_facturado'], True)
+            pdf.ln(5)
+
+            add_line('Toneladas transportadas', resumen_chofer['toneladas'], decimals=3)
+            add_line('Precio promedio por Tonelada', resumen_chofer['precio_prom_ton'], True)
+            add_line('Cantidad de viajes:', str(resumen_chofer['viajes']), False)
+            add_line('Kilómetros recorridos', resumen_chofer['km'], decimals=0)
+            add_line('Facturación (Sin IVA) por Km.', resumen_chofer['fact_sin_iva_km'], True)
+            add_line('Facturación (Con IVA) por Km.', resumen_chofer['fact_con_iva_km'], True)
+            add_line('GAS-OIL utilizado (Lts)', resumen_chofer['gasoil'], decimals=2)
+            add_line('Consumo cada 100 Kms.', resumen_chofer['consumo_100km'], decimals=2)
+
+            pdf_output = bytes(pdf.output(dest='S'))
+            return Response(pdf_output,
+                            mimetype='application/pdf',
+                            headers={'Content-Disposition': f'attachment;filename=resumen_{chofer_nombre}.pdf'})
+
+    except Exception as e:
+        import traceback
+        return f"<h1>Ocurrió un error al generar el PDF: {e}</h1><pre>{traceback.format_exc()}</pre>", 500
+    finally:
+        if conn:
+            conn.close()
 
 @app.route('/pdf/<tipo_reporte>')
 def generar_pdf(tipo_reporte):
@@ -2011,7 +2203,7 @@ def edit_flete(flete_id):
             g_codi = form_data.get('g_codi')
             g_cose = form_data.get('g_cose', '') # Optional
             o_peso_str = form_data.get('o_peso')
-            o_tara_str = form_data.get('o_tara')
+            o_neto_str = form_data.get('o_neto')
             g_tarflet_str = form_data.get('g_tarflet')
             g_kilomet_str = form_data.get('g_kilomet')
             g_ctaplade = form_data.get('g_ctaplade', '') # Optional
@@ -2023,7 +2215,7 @@ def edit_flete(flete_id):
                 'g_ctg': g_ctg,
                 'g_codi': g_codi,
                 'o_peso': o_peso_str,
-                'o_tara': o_tara_str,
+                'o_neto': o_neto_str,
                 'g_tarflet': g_tarflet_str,
                 'g_kilomet': g_kilomet_str,
                 'g_cuilchof': g_cuilchof
@@ -2035,17 +2227,11 @@ def edit_flete(flete_id):
 
             try:
                 o_peso = float(o_peso_str)
-                o_tara = float(o_tara_str)
+                o_neto = float(o_neto_str)
                 g_tarflet = float(g_tarflet_str)
                 g_kilomet = int(g_kilomet_str)
             except (ValueError, TypeError):
-                return "Error: Kilos, Tara, Tarifa y Kilómetros deben ser números válidos.", 400
-
-
-            if o_peso <= o_tara:
-                return "Error: Los Kilos Brutos deben ser mayores que los Kilos Tara."
-
-            o_neto = o_peso - o_tara
+                return "Error: Kilos, Neto, Tarifa y Kilómetros deben ser números válidos.", 400
             
             importe = round((o_neto / 1000) * g_tarflet, 2)
 

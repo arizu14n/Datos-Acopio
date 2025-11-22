@@ -51,6 +51,80 @@
         </form>
     </div>
 
+    {% if resumen_chofer %}
+    <div class="summary-container">
+        <h2>Resumen del Chofer</h2>
+        <a href="{{ url_for('export_resumen_pdf', chofer=filtros_aplicados.chofer, fecha_desde=filtros_aplicados.fecha_desde, fecha_hasta=filtros_aplicados.fecha_hasta) }}" class="btn btn-secondary mb-3" target="_blank">Exportar Resumen a PDF</a>
+        <table class="table table-bordered table-striped summary-table">
+            <tbody>
+                <tr>
+                    <th scope="row">Período:</th>
+                    <td>Desde: {{ resumen_chofer.periodo_desde }} Hasta: {{ resumen_chofer.periodo_hasta }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Chofer:</th>
+                    <td>{{ resumen_chofer.chofer_nombre }}</td>
+                </tr>
+                <tr class="table-group-divider">
+                    <th colspan="2">Montos Facturados por Categoría:</th>
+                </tr>
+                <tr>
+                    <th scope="row" class="ps-4">ROSARIO</th>
+                    <td>{{ format_number(resumen_chofer.rosario, is_currency=True) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row" class="ps-4">HARINA - OTROS</th>
+                    <td>{{ format_number(resumen_chofer.harina_otros, is_currency=True) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row" class="ps-4">ARRIMES</th>
+                    <td>{{ format_number(resumen_chofer.arrimes, is_currency=True) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row" class="ps-4">IVA (21%)</th>
+                    <td>{{ format_number(resumen_chofer.iva, is_currency=True) }}</td>
+                </tr>
+                <tr class="table-group-divider">
+                    <th scope="row">TOTAL FACTURADO</th>
+                    <td><strong>{{ format_number(resumen_chofer.total_facturado, is_currency=True) }}</strong></td>
+                </tr>
+                <tr>
+                    <th scope="row">Toneladas transportadas</th>
+                    <td>{{ format_number(resumen_chofer.toneladas, decimals=3) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Precio promedio por Tonelada</th>
+                    <td>{{ format_number(resumen_chofer.precio_prom_ton, is_currency=True) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Cantidad de viajes:</th>
+                    <td>{{ resumen_chofer.viajes }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Kilómetros recorridos</th>
+                    <td>{{ format_number(resumen_chofer.km, decimals=0) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Facturación (Sin IVA) por Km.</th>
+                    <td>{{ format_number(resumen_chofer.fact_sin_iva_km, is_currency=True) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Facturación (Con IVA) por Km.</th>
+                    <td>{{ format_number(resumen_chofer.fact_con_iva_km, is_currency=True) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">GAS-OIL utilizado (Lts)</th>
+                    <td>{{ format_number(resumen_chofer.gasoil, decimals=2) }}</td>
+                </tr>
+                <tr>
+                    <th scope="row">Consumo cada 100 Kms.</th>
+                    <td>{{ format_number(resumen_chofer.consumo_100km, decimals=2) }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
     <div class="table-container">
         <table>
             <thead>
@@ -173,12 +247,12 @@
                         </select>
                     </div>
                     <div class="col-md-2 mb-3">
-                        <label for="o_peso" class="form-label">Kilos Brutos</label>
+                        <label for="o_peso" class="form-label">Peso Origen</label>
                         <input type="number" step="0.01" class="form-control" id="o_peso" name="o_peso" required>
                     </div>
                     <div class="col-md-2 mb-3">
-                        <label for="o_tara" class="form-label">Kilos Tara</label>
-                        <input type="number" step="0.01" class="form-control" id="o_tara" name="o_tara" required>
+                        <label for="o_neto" class="form-label">Neto</label>
+                        <input type="number" step="0.01" class="form-control" id="o_neto" name="o_neto" required>
                     </div>
                     <div class="col-md-2 mb-3">
                         <label for="g_tarflet" class="form-label">Tarifa</label>
